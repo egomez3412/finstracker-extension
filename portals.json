@@ -1,0 +1,168 @@
+{
+  "_comment": "Portal mappings used by the Fins Sync extension. Resolution order per card: portalOverrides[cardId] → cards[cardKey] → issuers[issuer] → none. 'matchUrl' is a glob (`*` wildcards) that decides which navigations the extractor runs on. 'selector' is a comma-separated CSS selector list whose visible text is scanned for the first plausible balance; if no selector matches the heuristic scorer in background.js takes over.",
+  "issuers": {
+    "American Express": {
+      "loginUrl": "https://www.americanexpress.com/en-us/account/login",
+      "pointsUrlHint": "https://global.americanexpress.com/rewards",
+      "matchUrl": "https://*.americanexpress.com/*",
+      "selector": "[data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [data-testid*='rewards-balance'], [aria-label*='Membership Rewards'] [class*='balance'], [class*='RewardsHeader'] [class*='balance'], .balance-amount, [class*='reward'][class*='balance']"
+    },
+    "Chase": {
+      "loginUrl": "https://secure.chase.com/web/auth/dashboard",
+      "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards",
+      "matchUrl": "https://*.chase.com/*",
+      "selector": "[data-pt-name='rewardsBalance'], [data-pt-name*='reward'], [data-cy='ur-balance'], [data-cy*='reward-balance'], [data-cy*='points-balance'], [data-testid='rewards-balance'], [data-testid*='ultimate-rewards'], [data-testid*='reward-balance'], [aria-label*='Ultimate Rewards'] [class*='balance'], [aria-label*='Ultimate Rewards' i], [aria-label*='rewards balance' i], [class*='UltimateRewards'] [class*='balance'], [class*='rewards-header'] [class*='balance'], [class*='reward'][class*='balance'], .rewards-total, .balance-text"
+    },
+    "Capital One": {
+      "loginUrl": "https://verified.capitalone.com/auth/signin",
+      "pointsUrlHint": "https://myaccounts.capitalone.com/rewards",
+      "matchUrl": "https://*.capitalone.com/*",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='rewards-balance'], [data-testid*='points-balance'], [class*='RewardsBalance'], [class*='rewardsBalance'], [aria-label*='rewards balance'], .rewards-amount, [class*='Miles'] [class*='balance'], [class*='balance-amount']"
+    },
+    "Citi": {
+      "loginUrl": "https://online.citi.com/US/login.do",
+      "pointsUrlHint": "https://online.citi.com/US/ag/dashboard",
+      "matchUrl": "https://*.citi.com/*",
+      "selector": "[data-testid='points-balance'], [data-testid*='thankyou'], .points-balance, [class*='reward'][class*='balance'], [aria-label*='ThankYou']"
+    },
+    "Discover": {
+      "loginUrl": "https://portal.discover.com/customersvcs/universalLogin/ac_main",
+      "pointsUrlHint": "https://card.discover.com/cardmembersvcs/rewards/app/home",
+      "matchUrl": "https://*.discover.com/*",
+      "selector": "[data-testid='cashback-balance'], [data-testid*='rewards-balance'], .cashback-balance, .reward-balance, [class*='RewardsBalance'], [aria-label*='Cashback Bonus']"
+    },
+    "Wells Fargo": {
+      "loginUrl": "https://connect.secure.wellsfargo.com/auth/login",
+      "pointsUrlHint": "https://connect.secure.wellsfargo.com/accounts/start",
+      "matchUrl": "https://*.wellsfargo.com/*",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='go-far-rewards'], .rewards-amount, [aria-label*='Go Far Rewards']"
+    },
+    "Bank of America": {
+      "loginUrl": "https://secure.bankofamerica.com/login/sign-in/signOnV2Screen.go",
+      "pointsUrlHint": "https://secure.bankofamerica.com/customer-rewards/dashboard.go",
+      "matchUrl": "https://*.bankofamerica.com/*",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='preferred-rewards'], .rewards-amount, .balance-amount, [aria-label*='Cash Rewards'], [aria-label*='Points']"
+    },
+    "U.S. Bank": {
+      "loginUrl": "https://onlinebanking.usbank.com/Auth/Login",
+      "pointsUrlHint": "https://onlinebanking.usbank.com/Rewards/Home",
+      "matchUrl": "https://*.usbank.com/*",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='altitude'], .rewards-balance, [aria-label*='Altitude']"
+    },
+    "Alaska Airlines": {
+      "loginUrl": "https://www.alaskaair.com/account/login",
+      "pointsUrlHint": "https://www.alaskaair.com/account",
+      "matchUrl": "https://*.alaskaair.com/*",
+      "selector": "[data-testid='mileage-balance'], [data-testid*='miles-balance'], [class*='MileagePlan'] [class*='balance'], [aria-label*='miles balance'], .mileage-balance"
+    }
+  },
+  "cards": {
+    "chase-sapphire-preferred": {
+      "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards",
+      "selector": "[data-pt-name='rewardsBalance'], [data-cy='ur-balance'], [data-cy*='ultimate-rewards-balance'], [data-testid='ur-balance'], [data-testid*='ultimate-rewards'], [aria-label*='Ultimate Rewards' i], [aria-label*='Ultimate Rewards'] [class*='balance'], [class*='UltimateRewards'] [class*='balance']"
+    },
+    "chase-sapphire-reserve": {
+      "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards",
+      "selector": "[data-pt-name='rewardsBalance'], [data-cy='ur-balance'], [data-cy*='ultimate-rewards-balance'], [data-testid='ur-balance'], [data-testid*='ultimate-rewards'], [aria-label*='Ultimate Rewards' i], [aria-label*='Ultimate Rewards'] [class*='balance'], [class*='UltimateRewards'] [class*='balance']"
+    },
+    "chase-freedom-unlimited": {
+      "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards/cashBack",
+      "selector": "[data-pt-name='rewardsBalance'], [data-cy*='cash-back-balance'], [data-testid='cash-back-balance'], [data-testid*='cashback'], [aria-label*='Cash Back' i] [class*='balance'], [aria-label*='Cash Back' i]"
+    },
+    "chase-freedom-flex": {
+      "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards/cashBack",
+      "selector": "[data-pt-name='rewardsBalance'], [data-cy*='cash-back-balance'], [data-testid='cash-back-balance'], [data-testid*='cashback'], [aria-label*='Cash Back' i] [class*='balance'], [aria-label*='Cash Back' i]"
+    },
+    "chase-ink-business-preferred": {
+      "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards",
+      "selector": "[data-pt-name='rewardsBalance'], [data-cy='ur-balance'], [data-testid='ur-balance'], [data-testid*='ultimate-rewards'], [aria-label*='Ultimate Rewards' i] [class*='balance']"
+    },
+    "amazon-prime-visa": {
+      "loginUrl": "https://www.amazon.com/cpe/yourpayments/wallet",
+      "pointsUrlHint": "https://www.amazon.com/cpe/yourpayments/wallet",
+      "matchUrl": "https://*.amazon.com/*",
+      "selector": "[data-testid='reward-balance'], #rewards-balance, [class*='reward'][class*='balance']"
+    },
+    "amex-gold": {
+      "pointsUrlHint": "https://global.americanexpress.com/rewards/summary",
+      "selector": "[data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
+    },
+    "amex-platinum": {
+      "pointsUrlHint": "https://global.americanexpress.com/rewards/summary",
+      "selector": "[data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
+    },
+    "amex-green": {
+      "pointsUrlHint": "https://global.americanexpress.com/rewards/summary",
+      "selector": "[data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
+    },
+    "amex-blue-cash-preferred": {
+      "pointsUrlHint": "https://global.americanexpress.com/rewards/cash-back",
+      "selector": "[data-testid*='cash-back-balance'], [aria-label*='Cash Back'] [class*='balance'], [class*='CashBack'] [class*='balance']"
+    },
+    "amex-blue-cash-everyday": {
+      "pointsUrlHint": "https://global.americanexpress.com/rewards/cash-back",
+      "selector": "[data-testid*='cash-back-balance'], [aria-label*='Cash Back'] [class*='balance'], [class*='CashBack'] [class*='balance']"
+    },
+    "capital-one-venture-x": {
+      "pointsUrlHint": "https://myaccounts.capitalone.com/rewards",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='miles-balance'], [class*='Miles'] [class*='balance'], [aria-label*='miles balance']"
+    },
+    "capital-one-venture": {
+      "pointsUrlHint": "https://myaccounts.capitalone.com/rewards",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='miles-balance'], [class*='Miles'] [class*='balance'], [aria-label*='miles balance']"
+    },
+    "capital-one-savor": {
+      "pointsUrlHint": "https://myaccounts.capitalone.com/rewards",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='cash-back-balance'], [aria-label*='cash back'] [class*='balance']"
+    },
+    "capital-one-quicksilver": {
+      "pointsUrlHint": "https://myaccounts.capitalone.com/rewards",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='cash-back-balance'], [aria-label*='cash back'] [class*='balance']"
+    },
+    "citi-double-cash": {
+      "pointsUrlHint": "https://online.citi.com/US/ag/thankyou-rewards/redeem",
+      "selector": "[data-testid='points-balance'], [data-testid*='thankyou'], [aria-label*='ThankYou'] [class*='balance']"
+    },
+    "citi-premier": {
+      "pointsUrlHint": "https://online.citi.com/US/ag/thankyou-rewards/redeem",
+      "selector": "[data-testid='points-balance'], [data-testid*='thankyou'], [aria-label*='ThankYou'] [class*='balance']"
+    },
+    "citi-custom-cash": {
+      "pointsUrlHint": "https://online.citi.com/US/ag/thankyou-rewards/redeem",
+      "selector": "[data-testid='points-balance'], [data-testid*='thankyou'], [aria-label*='ThankYou'] [class*='balance']"
+    },
+    "discover-it": {
+      "pointsUrlHint": "https://card.discover.com/cardmembersvcs/rewards/app/home",
+      "selector": "[data-testid='cashback-balance'], [aria-label*='Cashback Bonus'], .cashback-balance, [class*='RewardsBalance']"
+    },
+    "discover-it-miles": {
+      "pointsUrlHint": "https://card.discover.com/cardmembersvcs/rewards/app/home",
+      "selector": "[data-testid='miles-balance'], [aria-label*='Miles'], .miles-balance, [class*='RewardsBalance']"
+    },
+    "wells-fargo-active-cash": {
+      "pointsUrlHint": "https://connect.secure.wellsfargo.com/auth/login/present?LOB=Rewards",
+      "selector": "[data-testid='rewards-balance'], [data-testid*='go-far-rewards'], [aria-label*='Go Far Rewards']"
+    },
+    "bofa-customized-cash": {
+      "pointsUrlHint": "https://secure.bankofamerica.com/customer-rewards/dashboard.go",
+      "selector": "[data-testid='rewards-balance'], [aria-label*='Cash Rewards'] [class*='balance'], .balance-amount"
+    },
+    "bofa-travel-rewards": {
+      "pointsUrlHint": "https://secure.bankofamerica.com/customer-rewards/dashboard.go",
+      "selector": "[data-testid='rewards-balance'], [aria-label*='Points'] [class*='balance'], .balance-amount"
+    },
+    "us-bank-altitude-go": {
+      "pointsUrlHint": "https://onlinebanking.usbank.com/Rewards/Home",
+      "selector": "[data-testid='rewards-balance'], [aria-label*='Altitude'] [class*='balance'], .rewards-balance"
+    },
+    "alaska-mileage-plan-visa": {
+      "pointsUrlHint": "https://www.alaskaair.com/account",
+      "selector": "[data-testid='mileage-balance'], [data-testid*='miles-balance'], [aria-label*='miles balance'], [class*='MileagePlan'] [class*='balance']"
+    },
+    "universal-rewards-plus": {
+      "_note": "Demo / fictional card — no real portal. Users can use Configure to set a custom URL and selector if they want to sync from a personal page.",
+      "pointsUrlHint": null,
+      "selector": ""
+    }
+  }
+}

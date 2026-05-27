@@ -1,0 +1,88 @@
+/* extension/content/picker.css — visual overlay for the element picker.
+ * Uses Fins palette tokens (charcoal + warm gold) so the HUD reads as part
+ * of the same product when injected into a third-party portal page.
+ *
+ * Notes:
+ *  - The highlight uses `box-shadow` + `outline` because some portals wrap
+ *    rewards numbers in containers with `overflow: hidden` that clip plain
+ *    outlines. `box-shadow` is not clipped.
+ *  - The HUD uses the maximum z-index so it always sits above modals.
+ */
+/* Picker visuals are scoped under `html.fins-picker-on` so they only render
+ * while the picker is actively running. If a previous session leaves a stale
+ * `.fins-picker-hover` or `.fins-picker-locked` class on an element (e.g. the
+ * page was navigated mid-pick, or cleanup raced with a SPA route change), the
+ * 9999px inset box-shadow would otherwise paint a giant dark veil over the
+ * whole page on every subsequent visit. Scoping by `html.fins-picker-on`
+ * guarantees the veil disappears the moment cleanup removes the root class.
+ */
+html.fins-picker-on .fins-picker-hover {
+    outline: 2px solid #d4a64a !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 9999px rgba(22, 26, 31, 0.12) inset, 0 0 0 2px #d4a64a !important;
+    cursor: crosshair !important;
+    transition: none !important;
+}
+html.fins-picker-on .fins-picker-locked {
+    outline: 3px solid #2f8568 !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 9999px rgba(22, 26, 31, 0.18) inset, 0 0 0 3px #2f8568 !important;
+}
+* { /* keep cursor consistent while picker is active */ }
+html.fins-picker-on, html.fins-picker-on * { cursor: crosshair !important; }
+
+.fins-picker-hud {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 2147483647;
+    background: #1f242c;
+    color: #f3eddc;
+    padding: 10px 12px;
+    border: 1px solid #3a414c;
+    border-left: 3px solid #d4a64a;
+    border-radius: 10px;
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    max-width: 380px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+}
+.fins-picker-hud strong { color: #d4a64a; }
+.fins-picker-hud .fins-row { margin-top: 8px; display: flex; gap: 6px; }
+.fins-picker-hud button {
+    background: #2a313b;
+    color: #f3eddc;
+    border: 1px solid #3a414c;
+    border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 500;
+}
+.fins-picker-hud button:hover { background: #353d49; }
+.fins-picker-hud button.primary {
+    background: #d4a64a;
+    color: #161a1f;
+    border-color: #d4a64a;
+}
+.fins-picker-hud button.primary:hover { background: #b8862c; border-color: #b8862c; }
+.fins-picker-hud .fins-url {
+    color: #b9b1a0;
+    font-size: 11px;
+    word-break: break-all;
+    margin-top: 4px;
+}
+.fins-picker-hud .fins-preview {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: #161a1f;
+    border: 1px solid #3a414c;
+    border-radius: 6px;
+    font-size: 12px;
+    max-height: 64px;
+    overflow: hidden;
+    word-break: break-word;
+}
+.fins-picker-hud .fins-preview b { color: #d4a64a; }
+.fins-picker-hud .fins-preview .fins-num { color: #d4a64a; font-weight: 600; }
+.fins-picker-hud .fins-preview .fins-empty { color: #b9b1a0; font-style: italic; }

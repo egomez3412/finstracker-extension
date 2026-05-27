@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finstracker — Sync</title>
+    <link rel="icon" type="image/png" href="icons/icon-32.png">
+    <link rel="stylesheet" href="popup.css">
+    <script src="popup.js" type="module" defer></script>
+</head>
+
+<body>
+    <header>
+        <a class="brand" href="#" aria-label="Finstracker">
+            <span class="brand-mark" aria-hidden="true">
+                <img src="icons/icon-128.png" alt="" width="28" height="28" decoding="async">
+            </span>
+            <span class="brand-word">Finstracker</span>
+            <span class="brand-tag">Sync</span>
+        </a>
+        <button type="button" id="settings-toggle" class="icon-btn"
+            aria-label="Settings" aria-expanded="false" title="Settings">
+            <svg class="icon-gear" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <svg class="icon-close" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+            </svg>
+        </button>
+    </header>
+
+    <main>
+        <!-- SETTINGS VIEW -->
+        <section id="settings-view" class="settings-page" aria-label="Extension settings" hidden>
+            <h2 class="settings-title">Settings</h2>
+
+            <form id="settings-form" class="settings-section" novalidate>
+                <h3 class="settings-section-title">General</h3>
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <span class="settings-row-name">Auto-detect on known portals</span>
+                        <span class="settings-row-hint">Offer to sync when you land on a supported issuer page.</span>
+                    </div>
+                    <select id="auto-detect-input" name="autoDetect">
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                    </select>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <span class="settings-row-name">Appearance</span>
+                        <span class="settings-row-hint">Match your system, or pin light or dark.</span>
+                    </div>
+                    <select id="theme-input" name="theme">
+                        <option value="system">Match system</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                    </select>
+                </div>
+                <p class="form-error" aria-live="polite"></p>
+            </form>
+
+            <form id="configure-form" class="settings-section" novalidate>
+                <h3 class="settings-section-title">Card portals</h3>
+                <p class="settings-section-hint">Pick a card and open its portal page to teach Fins where the points live.</p>
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <span class="settings-row-name">Card</span>
+                        <span id="configure-card-meta" class="settings-row-hint" hidden></span>
+                    </div>
+                    <select id="configure-card-select" name="cardId" required>
+                        <option value="">— Select a card —</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <button type="submit" id="configure-open-btn">Open portal &amp; pick element</button>
+                    <button type="button" id="configure-clear-btn" class="secondary" hidden>Reset to default</button>
+                </div>
+                <p class="form-error" aria-live="polite"></p>
+            </form>
+
+            <div class="settings-actions">
+                <button type="button" id="logout-btn" class="danger" hidden>Log out</button>
+                <span class="settings-actions-spacer"></span>
+                <button type="button" id="settings-close" class="secondary">Cancel</button>
+                <button type="button" id="settings-save">Save</button>
+            </div>
+        </section>
+
+        <!-- AUTH VIEW -->
+        <section id="auth-view" aria-label="Sign in to Finstracker" hidden>
+            <div class="auth-bridge card-form">
+                <h2>Sign in to Finstracker</h2>
+                <p class="auth-bridge-lead">
+                    We'll open Finstracker in a new tab so you can sign in
+                    securely &mdash; with your password, Google, or whatever
+                    you use on the web.
+                </p>
+                <button type="button" id="open-web-signin" class="auth-bridge-cta">
+                    <span>Sign in on finstracker.com</span>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                        <path d="M14 3h7v7"></path>
+                        <path d="M10 14L21 3"></path>
+                        <path d="M21 14v7h-7"></path>
+                        <path d="M3 10V3h7"></path>
+                    </svg>
+                </button>
+                <p id="auth-bridge-status" class="auth-bridge-status" aria-live="polite" hidden></p>
+                <p class="auth-foot-link">
+                    Don't have an account?
+                    <a id="signup-web-link" href="https://finstracker.com/signup.html" target="_blank" rel="noopener">Sign up on the web &rarr;</a>
+                </p>
+            </div>
+        </section>
+
+        <!-- CARDS VIEW -->
+        <section id="cards-view" aria-label="Your cards" hidden>
+            <p id="user-line">Signed in as <span class="who"></span></p>
+            <button type="button" id="open-dashboard-btn" class="dashboard-cta" title="Open your Finstracker dashboard in a new tab">
+                <span>Open dashboard</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                    <path d="M14 3h7v7"></path>
+                    <path d="M10 14L21 3"></path>
+                    <path d="M21 14v7h-7"></path>
+                    <path d="M3 10V3h7"></path>
+                </svg>
+            </button>
+            <div id="capture-banner" class="banner" hidden></div>
+            <ul id="card-list" class="cards"></ul>
+            <p id="cards-status" class="status" aria-live="polite"></p>
+        </section>
+    </main>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+</body>
+
+</html>

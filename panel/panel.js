@@ -11,7 +11,9 @@ const state = {
     tab: "cards", // cards | credits | offers
     user: null,
     apiBase: PRODUCTION,
-    settings: { autoDetect: true, checkoutHints: false, theme: "system" },
+    settings: { autoDetect: true, checkoutHints: false, theme: "system", addOffersToCard: true, recordActivity: true, autopilotAuto: false },
+    autopilot: {}, // cardId → { on, lastRun, results }
+    autopilotRun: null, // { running, total, index, cardName, step }
     overrides: {},
     pages: {}, // cardId → { url, source } where the balance was found or the user set it
     session: null,
@@ -42,6 +44,8 @@ function money(n, { cents = false } = {}) {
 const balanceText = (c) => (c.rewardType === "cashback" ? money(c.currentCashBack, { cents: true }) : `${Number(c.currentPoints || 0).toLocaleString()} pts`);
 const balanceValue = (c) => (c.rewardType === "cashback" ? Number(c.currentCashBack) || 0 : ((Number(c.currentPoints) || 0) * (Number(c.pointValueCents) || 1)) / 100);
 const baseTitle = (t) => String(t || "").split(" · ")[0];
+/** 98,765 for points, $123.45 for cash back. */
+const unitValue = (unit, n) => (unit === "cashback" ? `$${Number(n).toFixed(2)}` : Number(n).toLocaleString());
 
 const ISSUER_COLORS = [
     [/chase/i, "#1d4f9c"], [/american express|amex/i, "#5aa1e3"], [/capital one/i, "#c8102e"], [/citi/i, "#0e8a9c"],
@@ -142,19 +146,26 @@ function signinView() {
 function statusStrip() {
     const s = state.session;
     if (!s) return "";
-    const offers = s.kind === "offers";
+    const offers = s.kind === "offers" || s.kind === "benefits";
     const btn = (act, label, primary = false) => `<button type="button" class="${primary ? "btn-primary" : "btn-ghost"} btn-small" data-act="${act}">${label}</button>`;
     let icon, title, sub = "", buttons;
     if (s.status === "synced" || s.status === "configured") {
         icon = '<span class="dot dot-good" aria-hidden="true"></span>';
         title = offers ? s.statusLabel || "Offers saved" : s.status === "configured" ? "Balance spot saved" : `${s.cardName} synced`;
-        if (!offers && s.lastScrape?.value != null) sub = Number(s.lastScrape.value).toLocaleString();
+        if (!offers && s.lastScrape?.value != null) sub = unitValue(s.unit, s.lastScrape.value);
         buttons = btn("dismiss-session", "Done");
     } else if (s.status === "confirm" && s.pending) {
+        const value = unitValue(s.unit, s.pending.value);
         icon = '<span class="dot" style="background:var(--selection-ink)" aria-hidden="true"></span>';
         title = `Is this your ${s.cardName} balance?`;
-        sub = `${Number(s.pending.value).toLocaleString()} · highlighted on the page`;
-        buttons = btn("confirm-reading", `Use ${Number(s.pending.value).toLocaleString()}`, true) + btn("session-pick", "Pick another") + btn("dismiss-session", "Cancel");
+        sub = `${value} · highlighted on the page`;
+        buttons = btn("confirm-reading", `Use ${value}`, true) + btn("session-pick", "Pick another") + btn("dismiss-session", "Cancel");
+    } else if (s.status === "mismatch" && s.mismatch) {
+        const kind = s.mismatch.unit === "cashback" ? "cash back" : "points";
+        icon = '<span class="dot" style="background:var(--selection-ink)" aria-hidden="true"></span>';
+        title = `This page shows ${kind}: ${unitValue(s.mismatch.unit, s.mismatch.value)}`;
+        sub = `Finstracker tracks ${s.cardName} in ${s.unit === "cashback" ? "cash back" : "points"}.`;
+        buttons = `<button type="button" class="btn-primary btn-small" data-act="status-action" data-value="switch-type">Switch to ${kind}</button>` + btn("session-pick", "Pick the balance") + btn("dismiss-session", "Cancel");
     } else if (s.status === "error") {
         icon = '<span class="dot dot-bad" aria-hidden="true"></span>';
         title = `Couldn't sync ${s.cardName || ""}`;
@@ -208,6 +219,7 @@ function cardRow(card) {
     const rs = state.rowState.get(card.id);
     const fee = nextFeeDate(card, today());
     const override = state.overrides[card.id];
+    const ap = state.autopilot[card.id] || {};
     const sub = rs
         ? `<span class="row-state is-${rs.kind}">${rs.kind === "syncing" ? '<span class="spinner" aria-hidden="true"></span>' : ""}${esc(rs.text)}</span>`
         : esc([card.issuer, card.updatedAt ? `Updated ${ago(card.updatedAt)}` : ""].filter(Boolean).join(" · "));
@@ -223,10 +235,14 @@ function cardRow(card) {
                 ${card.annualFee > 0 ? `<div><dt>Annual fee</dt><dd>${esc(money(card.annualFee))}${fee ? ` · ${esc(shortDate(fee))}` : ""}</dd></div>` : ""}
                 <div><dt>Rewards page</dt><dd>${state.pages[card.id] ? esc(hostOf(state.pages[card.id].url)) : "Not saved yet"}</dd></div>
                 ${override ? `<div><dt>Balance spot</dt><dd>${override.source === "user-picker" ? "Your pick" : "Learned"}</dd></div>` : ""}
+                <div><dt>Daily autopilot</dt><dd><button type="button" class="toggle toggle-inline" role="switch" aria-checked="${Boolean(ap.on)}" aria-label="Daily autopilot for ${esc(card.displayName)}" data-act="toggle-autopilot" data-id="${esc(card.id)}"><span class="toggle-thumb"></span></button></dd></div>
+                ${ap.lastRun ? `<div><dt>Last autopilot</dt><dd>${esc(ago(new Date(ap.lastRun).toISOString()))}</dd></div>${Object.entries(ap.results || {}).map(([k, v]) => `<div><dt>${esc(k[0].toUpperCase() + k.slice(1))}</dt><dd title="${esc(v)}">${esc(v)}</dd></div>`).join("")}` : ""}
             </dl>
             <div class="action-row">
-                <button type="button" class="btn-primary btn-small" data-act="update" data-id="${esc(card.id)}">Update points</button>
+                <button type="button" class="btn-primary btn-small" data-act="run-autopilot" data-id="${esc(card.id)}">Run autopilot</button>
+                <button type="button" class="btn-ghost btn-small" data-act="update" data-id="${esc(card.id)}">Update ${card.rewardType === "cashback" ? "cash back" : "points"}</button>
                 <button type="button" class="btn-ghost btn-small" data-act="sync-offers" data-id="${esc(card.id)}">Sync offers</button>
+                <button type="button" class="btn-ghost btn-small" data-act="sync-benefits" data-id="${esc(card.id)}">Sync benefits</button>
                 <button type="button" class="btn-ghost btn-small" data-act="read-tab" data-id="${esc(card.id)}">Read this tab</button>
                 <button type="button" class="btn-ghost btn-small" data-act="pick" data-id="${esc(card.id)}">Pick the balance</button>
                 <button type="button" class="btn-ghost btn-small" data-act="use-tab" data-id="${esc(card.id)}">Use this tab</button>
@@ -236,7 +252,7 @@ function cardRow(card) {
 }
 
 function cardsPanel() {
-    const action = headLink(`${base()}/cards`, "All cards");
+    const action = `<div class="action-row">${state.cards?.length ? `<button type="button" class="btn-ghost btn-small" data-act="run-autopilot" ${state.autopilotRun ? "disabled" : ""}>Run autopilot</button>` : ""}${headLink(`${base()}/cards`, "All cards")}</div>`;
     if (!state.cards) return panel("Your cards", action, placeholderRows());
     if (!state.cards.length) return panel("Your cards", headLink(`${base()}/cards`, "Add a card"), emptyState("No cards yet"));
     const active = state.session?.cardId;
@@ -273,14 +289,23 @@ function offersPanel() {
         o.valueCents ? money(o.valueCents / 100) : "")).join("")}</ul></div>`);
 }
 
+function autopilotStrip() {
+    const run = state.autopilotRun;
+    if (!run) return "";
+    return `<section class="panel status" aria-live="polite"><div class="panel-body">
+        <div class="row"><span class="spinner" aria-hidden="true"></span><div class="row-main"><div class="row-title">Autopilot · ${esc(run.cardName || "")}</div><div class="row-sub">${esc(`Card ${run.index + 1} of ${run.total} · ${run.step}${run.background ? " · in a background tab" : ""}`)}</div></div></div>
+        <div class="action-row"><button type="button" class="btn-ghost btn-small" data-act="stop-autopilot">Stop</button></div>
+    </div></section>`;
+}
+
 function homeView() {
     const body = state.tab === "credits" ? creditsPanel() : state.tab === "offers" ? offersPanel() : cardsPanel();
-    return `<div class="view" data-view="home">${statusStrip()}${siteBlock()}${statsBlock()}${tabsBlock()}${body}</div>`;
+    return `<div class="view" data-view="home">${autopilotStrip()}${statusStrip()}${siteBlock()}${statsBlock()}${tabsBlock()}${body}</div>`;
 }
 
 function settingsView() {
     const s = state.settings;
-    const toggle = (act, on, label) => `<button type="button" class="toggle" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="${act}"><span class="toggle-thumb"></span></button>`;
+    const toggle = (act, on, label, key = "") => `<button type="button" class="toggle" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="${act}"${key ? ` data-value="${key}"` : ""}><span class="toggle-thumb"></span></button>`;
     const theme = (value, label) => `<button type="button" role="tab" aria-selected="${s.theme === value}" data-act="theme" data-value="${value}">${label}</button>`;
     const cards = state.cards || [];
     const picked = cards.find((c) => c.id === state.configureCard);
@@ -290,6 +315,9 @@ function settingsView() {
         ${panel("Sync", "", `<div class="panel-body"><ul class="rows">
             ${line("Offer to sync on card portals", toggle("toggle-autodetect", s.autoDetect, "Offer to sync on card portals"))}
             ${line("Best card at checkout", toggle("toggle-checkout", s.checkoutHints, "Best card at checkout"))}
+            ${line("Add offers to my cards", toggle("toggle-setting", s.addOffersToCard, "Add offers to my cards", "addOffersToCard"))}
+            ${line("Record points activity", toggle("toggle-setting", s.recordActivity, "Record points activity", "recordActivity"))}
+            ${line("Daily autopilot when signed in", toggle("toggle-setting", s.autopilotAuto, "Daily autopilot when signed in", "autopilotAuto"))}
         </ul></div>`)}
         ${panel("Appearance", "", `<div class="panel-body"><ul class="rows">${line("Theme", `<div class="seg" role="tablist" aria-label="Theme">${theme("system", "System")}${theme("light", "Light")}${theme("dark", "Dark")}</div>`)}</ul></div>`)}
         ${panel("Rewards pages", "", `<div class="panel-body form-stack">
@@ -416,13 +444,38 @@ const actions = {
         if (!r.ok) setRowState(card.id, "error", r.error || "Couldn't start the sync");
         else { state.rowState.delete(card.id); render(); }
     },
+    async "run-autopilot"(el) {
+        const ids = el.dataset.id ? [el.dataset.id] : Object.entries(state.autopilot).filter(([, v]) => v.on).map(([id]) => id);
+        const r = await send({ type: "runAutopilot", cardIds: ids });
+        if (!r.ok) toast(r.error || "Couldn't start autopilot", { kind: "error" });
+        else toast(ids.length === 1 ? "Autopilot started" : ids.length ? `Autopilot started for ${ids.length} cards` : "Autopilot started for all cards");
+    },
+    async "stop-autopilot"() { await send({ type: "stopAutopilot" }); toast("Autopilot stopped"); },
+    async "toggle-autopilot"(el) {
+        const on = !state.autopilot[el.dataset.id]?.on;
+        await send({ type: "setAutopilot", cardId: el.dataset.id, on });
+        if (on && !state.settings.autopilotAuto) toast("Turn on Daily autopilot in Settings to run it by itself");
+    },
+    async "toggle-setting"(el) {
+        const key = el.dataset.value;
+        await setState({ [key]: !state.settings[key] });
+    },
+    async "sync-benefits"(el) {
+        const card = cardById(el.dataset.id);
+        setRowState(card.id, "syncing", `Opening ${card.displayName} benefits…`);
+        const r = await send({ type: "syncBenefits", card });
+        if (handleSignedOut(r)) return;
+        if (!r.ok) return setRowState(card.id, "error", r.error || "Couldn't check benefits");
+        setRowState(card.id, "success", r.marked.length ? `Marked used: ${r.marked.join(", ")}` : `${r.read} benefits checked, nothing new used`);
+        loadCredits();
+    },
     async "sync-offers"(el) {
         const card = cardById(el.dataset.id);
         setRowState(card.id, "syncing", `Opening ${card.issuer} offers…`);
         const r = await send({ type: "syncOffers", card });
         if (handleSignedOut(r)) return;
         if (!r.ok) return setRowState(card.id, "error", r.error || "Couldn't sync offers");
-        setRowState(card.id, "success", `${r.created || 0} new offers, ${r.updated || 0} updated`);
+        setRowState(card.id, "success", `${r.added ? `${r.added} added to the card · ` : ""}${r.created || 0} new, ${r.updated || 0} updated`);
         loadOffers();
     },
     async "read-tab"(el) {
@@ -468,6 +521,10 @@ const actions = {
         if (!r.ok) toast(r.error || "Couldn't save the balance", { kind: "error" });
     },
     async "retry-session"() { await send({ type: "retryCapture" }); },
+    async "status-action"(el) {
+        const r = await send({ type: "statusAction", action: el.dataset.value });
+        if (r && !r.ok && r.error) toast(r.error, { kind: "error" });
+    },
     "use-credit"(el) { markCredit(el.dataset.id, true); },
     "use-offer"(el) { markOffer(el.dataset.id, true); },
     async "toggle-autodetect"() { await setState({ autoDetect: !state.settings.autoDetect }); },
@@ -540,6 +597,14 @@ onChanged((changes) => {
     if (changes.theme) { state.settings.theme = changes.theme.newValue || "system"; applyTheme(state.settings.theme); }
     if (changes.autoDetect) state.settings.autoDetect = changes.autoDetect.newValue !== false;
     if (changes.checkoutHints) state.settings.checkoutHints = Boolean(changes.checkoutHints.newValue);
+    for (const key of ["addOffersToCard", "recordActivity"]) if (changes[key]) state.settings[key] = changes[key].newValue !== false;
+    if (changes.autopilotAuto) state.settings.autopilotAuto = Boolean(changes.autopilotAuto.newValue);
+    if (changes.autopilot) state.autopilot = changes.autopilot.newValue || {};
+    if (changes.autopilotRun) {
+        const was = state.autopilotRun;
+        state.autopilotRun = changes.autopilotRun.newValue || null;
+        if (was && !state.autopilotRun) { loadCards({ fresh: true }); loadCredits(); loadOffers(); }
+    }
     if (changes.portalOverrides) state.overrides = changes.portalOverrides.newValue || {};
     if (changes.rewardsPages) state.pages = changes.rewardsPages.newValue || {};
     if (changes.apiBase) state.apiBase = changes.apiBase.newValue || PRODUCTION;
@@ -553,7 +618,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
 /* ---------- start ---------- */
 
 (async () => {
-    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "autoDetect", "checkoutHints", "theme", "cardsCache"]);
+    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "autoDetect", "checkoutHints", "theme", "cardsCache", "addOffersToCard", "recordActivity", "autopilotAuto", "autopilot", "autopilotRun"]);
     applyTheme(s.theme);
     Object.assign(state, {
         user: s.user,
@@ -561,7 +626,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
         session: s.captureSession,
         overrides: s.portalOverrides || {},
         pages: s.rewardsPages || {},
-        settings: { autoDetect: s.autoDetect !== false, checkoutHints: Boolean(s.checkoutHints), theme: s.theme || "system" },
+        settings: { autoDetect: s.autoDetect !== false, checkoutHints: Boolean(s.checkoutHints), theme: s.theme || "system", addOffersToCard: s.addOffersToCard !== false, recordActivity: s.recordActivity !== false, autopilotAuto: Boolean(s.autopilotAuto) },
+        autopilot: s.autopilot || {},
+        autopilotRun: s.autopilotRun || null,
         cards: Array.isArray(s.cardsCache) ? s.cardsCache : null, // paint right away, refresh below
     });
     if (!s.token) { state.view = "signin"; render(); return; }

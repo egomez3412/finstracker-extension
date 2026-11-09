@@ -63,23 +63,17 @@ const shortDate = (ymd) => new Date(`${ymd}T12:00:00`).toLocaleDateString("en-US
 let toastTimer = 0;
 function toast(text, { kind = "", undo = null } = {}) {
     const el = document.getElementById("toast");
-    el.className = `show ${kind}`;
+    el.className = `toast show ${kind}`;
     el.innerHTML = `<span>${esc(text)}</span>${undo ? '<button type="button">Undo</button>' : ""}`;
-    if (undo) el.querySelector("button").onclick = () => { el.className = ""; undo(); };
+    if (undo) el.querySelector("button").onclick = () => { el.className = "toast"; undo(); };
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.className = ""; }, undo ? 5000 : 3200);
+    toastTimer = setTimeout(() => { el.className = "toast"; }, undo ? 5000 : 3200);
 }
 
 function applyTheme(theme) {
     if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
     else delete document.documentElement.dataset.theme;
 }
-
-const ICON = {
-    chev: '<svg class="chev" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    out: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    tag: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 8.6V3a1 1 0 0 1 1-1h5.6L14 7.4 8.4 13z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="5.2" cy="5.2" r="1" fill="currentColor"/></svg>',
-};
 
 /* ---------- data ---------- */
 
@@ -128,13 +122,19 @@ function loadAll() {
     loadSite(true);
 }
 
-/* ---------- views ---------- */
+/* ---------- views (same building blocks as the dashboard's standard tabs) ---------- */
+
+const ICON_CHEV = '<svg class="chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const headLink = (href, label) => `<a class="btn-ghost btn-small" href="${esc(href)}" data-act="open-link">${esc(label)}</a>`;
+const panel = (title, action, body, extra = "") => `<section class="panel"${extra}><div class="panel-head"><h2>${esc(title)}</h2>${action || ""}</div>${body}</section>`;
+const placeholderRows = (n = 3) => `<div class="panel-body">${'<div class="ph ph-row"></div>'.repeat(n)}</div>`;
+const emptyState = (title, text) => `<div class="empty-state"><b>${esc(title)}</b>${text ? `<span>${esc(text)}</span>` : ""}</div>`;
 
 function signinView() {
     return `<section class="view signin" data-view="signin">
-        <h1>Sign in to Finstracker</h1>
-        <button type="button" class="btn-primary btn-block" data-act="signin" ${state.waitingForSignIn ? "disabled" : ""}>${state.waitingForSignIn ? "Waiting for sign-in…" : "Sign in on finstracker.com"}</button>
-        <a class="link small" href="${esc(base())}/signup" data-act="open-link">Create an account</a>
+        <h1 class="page-title">Sign in to Finstracker</h1>
+        <button type="button" class="btn-primary" data-act="signin" ${state.waitingForSignIn ? "disabled" : ""}>${state.waitingForSignIn ? "Waiting for sign-in…" : "Sign in on finstracker.com"}</button>
+        <a class="link-btn" href="${esc(base())}/signup" data-act="open-link">Create an account</a>
     </section>`;
 }
 
@@ -142,18 +142,27 @@ function statusStrip() {
     const s = state.session;
     if (!s) return "";
     const offers = s.kind === "offers";
+    const btn = (act, label, primary = false) => `<button type="button" class="${primary ? "btn-primary" : "btn-ghost"} btn-small" data-act="${act}">${label}</button>`;
+    let icon, title, sub = "", buttons;
     if (s.status === "synced" || s.status === "configured") {
-        const value = s.lastScrape?.value;
-        const title = offers ? s.statusLabel || "Offers saved" : s.status === "configured" ? "Balance spot saved" : `${s.cardName} synced`;
-        return `<section class="status is-success"><span class="mark" aria-hidden="true">✓</span><div><div class="status-title">${esc(title)}</div>${!offers && value != null ? `<div class="status-text">${esc(Number(value).toLocaleString())}</div>` : ""}</div>
-            <div class="actions"><button type="button" class="btn-ghost btn-xs" data-act="dismiss-session">Done</button></div></section>`;
+        icon = '<span class="dot dot-good" aria-hidden="true"></span>';
+        title = offers ? s.statusLabel || "Offers saved" : s.status === "configured" ? "Balance spot saved" : `${s.cardName} synced`;
+        if (!offers && s.lastScrape?.value != null) sub = Number(s.lastScrape.value).toLocaleString();
+        buttons = btn("dismiss-session", "Done");
+    } else if (s.status === "error") {
+        icon = '<span class="dot dot-bad" aria-hidden="true"></span>';
+        title = `Couldn't sync ${s.cardName || ""}`;
+        sub = s.lastError || "Something went wrong";
+        buttons = (offers ? "" : btn("session-pick", "Pick the balance", true)) + btn("dismiss-session", "Dismiss");
+    } else {
+        icon = '<span class="spinner" aria-hidden="true"></span>';
+        title = s.statusLabel || `Syncing ${s.cardName || ""}`;
+        buttons = (offers || s.status === "picking" ? "" : btn("session-pick", "Pick the balance")) + btn("dismiss-session", "Cancel");
     }
-    if (s.status === "error") {
-        return `<section class="status is-error" role="alert"><span class="mark bad" aria-hidden="true">!</span><div><div class="status-title">Couldn't sync ${esc(s.cardName || "")}</div><div class="status-text">${esc(s.lastError || "Something went wrong")}</div></div>
-            <div class="actions">${offers ? "" : '<button type="button" class="btn-primary btn-xs" data-act="session-pick">Pick the balance</button>'}<button type="button" class="btn-ghost btn-xs" data-act="dismiss-session">Dismiss</button></div></section>`;
-    }
-    return `<section class="status"><span class="spinner" aria-hidden="true"></span><div><div class="status-title">${esc(s.statusLabel || `Syncing ${s.cardName || ""}`)}</div></div>
-        <div class="actions">${offers || s.status === "picking" ? "" : '<button type="button" class="btn-ghost btn-xs" data-act="session-pick">Pick the balance</button>'}<button type="button" class="btn-ghost btn-xs" data-act="dismiss-session">Cancel</button></div></section>`;
+    return `<section class="panel status"${s.status === "error" ? ' role="alert"' : ""}><div class="panel-body">
+        <div class="row">${icon}<div class="row-main"><div class="row-title">${esc(title)}</div>${sub ? `<div class="row-sub wrap">${esc(sub)}</div>` : ""}</div></div>
+        <div class="action-row">${buttons}</div>
+    </div></section>`;
 }
 
 function siteBlock() {
@@ -162,33 +171,31 @@ function siteBlock() {
     const [best, ...rest] = a.ranked;
     const name = a.context.guessed ? "this checkout" : a.context.name;
     const others = rest.filter((r) => r.cents < best.cents || r.rate !== best.rate).slice(0, 2);
-    return `<section class="panel site" aria-label="Best card on this site">
-        <div class="panel-head"><h2>Pay on ${esc(name)} with</h2><span class="pill">${esc(a.label || CATEGORY_LABELS[a.context.category])}</span></div>
-        <div class="best"><span class="best-name">${esc(best.card.displayName)}</span><span class="best-rate">${esc(rateLabel(best.card, best.rate))}</span><span class="row-sub">${esc(best.cents)}¢ back per $1</span></div>
-        ${others.length ? `<ol class="ranked">${others.map((r, i) => `<li><span class="rank">${i + 2}</span><span class="row-title">${esc(r.card.displayName)}</span><span class="muted num">${esc(rateLabel(r.card, r.rate))} · ${esc(r.cents)}¢</span></li>`).join("")}</ol>` : ""}
-        ${a.offers?.length ? `<div class="site-offers">${a.offers.slice(0, 3).map((o) => `<div class="site-offer"><span class="pos">${ICON.tag}</span><span><strong>${esc(o.title || o.merchant)}</strong><span class="row-sub">${esc([o.cardName, o.expiresAt ? `ends ${dueLabel(o.expiresAt, today())}` : ""].filter(Boolean).join(" · "))}</span></span></div>`).join("")}</div>` : ""}
-    </section>`;
+    const offers = (a.offers || []).slice(0, 3);
+    return panel(`Best card on ${name}`, `<span class="muted small">${esc(a.label || CATEGORY_LABELS[a.context.category])}</span>`, `<div class="panel-body card-summary">
+        <span class="summary-kicker">Pay with</span>
+        <strong class="summary-big">${esc(best.card.displayName)}</strong>
+        <span class="row-sub">${esc(rateLabel(best.card, best.rate))} · ${esc(best.cents)}¢ back per $1</span>
+        ${others.length ? `<dl class="summary-list">${others.map((r) => `<div><dt>${esc(r.card.displayName)}</dt><dd>${esc(rateLabel(r.card, r.rate))} · ${esc(r.cents)}¢</dd></div>`).join("")}</dl>` : ""}
+        ${offers.length ? `<h3 class="card-summary-section-title">Offers here</h3><dl class="summary-list">${offers.map((o) => `<div><dt>${esc(o.title || o.merchant)}</dt><dd>${esc([o.cardName, o.expiresAt ? dueLabel(o.expiresAt, today()) : ""].filter(Boolean).join(" · "))}</dd></div>`).join("")}</dl>` : ""}
+    </div>`, ' aria-label="Best card on this site"');
 }
 
 function statsBlock() {
-    if (!state.cards || !state.credits || !state.offers) return `<div class="stats">${'<div class="ph ph-tile"></div>'.repeat(3)}</div>`;
+    if (!state.cards || !state.credits || !state.offers) return `<div class="panel metrics">${'<div class="metric"><div class="ph ph-metric"></div></div>'.repeat(3)}</div>`;
     const s = summary({ cards: state.cards, perks: state.credits, offers: state.offers, today: today() });
-    const tile = (tab, value, label, cls = "") => `<button type="button" class="stat" data-act="tab" data-tab="${tab}"><span class="stat-value ${cls}">${esc(value)}</span><span class="stat-label">${esc(label)}</span></button>`;
-    return `<div class="stats">
-        ${tile("credits", money(s.creditsValue), s.expiringCredits ? `${s.expiringCredits} ending soon` : "Unused credits", s.creditsValue ? "pos" : "")}
-        ${tile("offers", String(s.offersCount), s.offersCount === 1 ? "Active offer" : "Active offers")}
-        ${tile("cards", money(s.feesDue), "Fees in 60 days")}
+    const metric = (tab, label, value) => `<button type="button" data-act="tab" data-tab="${tab}"><span>${esc(label)}</span><strong>${esc(value)}</strong>${ICON_CHEV}</button>`;
+    return `<div class="panel metrics">
+        ${metric("credits", "Credits", money(s.creditsValue))}
+        ${metric("offers", "Offers", String(s.offersCount))}
+        ${metric("cards", "Fees due", money(s.feesDue))}
     </div>`;
 }
 
 function tabsBlock() {
-    const count = (list, fn) => (list ? `<span class="tab-count">${fn(list).length}</span>` : "");
-    const t = (id, label, extra = "") => `<button type="button" role="tab" aria-selected="${state.tab === id}" class="${state.tab === id ? "on" : ""}" data-act="tab" data-tab="${id}">${label}${extra}</button>`;
-    return `<div class="pill-tabs" role="tablist">${t("cards", "Cards", count(state.cards, (l) => l))}${t("credits", "Credits", count(state.credits, (l) => openCredits(l, today())))}${t("offers", "Offers", count(state.offers, (l) => openOffers(l, today())))}</div>`;
+    const t = (id, label) => `<button type="button" role="tab" class="tab" aria-selected="${state.tab === id}" data-act="tab" data-tab="${id}">${label}</button>`;
+    return `<div class="tabs" role="tablist">${t("cards", "Cards")}${t("credits", "Credits")}${t("offers", "Offers")}</div>`;
 }
-
-const placeholderRows = (n = 3) => '<div class="ph ph-row"></div>'.repeat(n);
-const foot = (href, label) => `<div class="panel-foot"><a class="link" href="${esc(href)}" data-act="open-link">${esc(label)} ${ICON.out}</a></div>`;
 
 function cardRow(card) {
     const open = state.open.has(card.id);
@@ -198,67 +205,64 @@ function cardRow(card) {
     const sub = rs
         ? `<span class="row-state is-${rs.kind}">${rs.kind === "syncing" ? '<span class="spinner" aria-hidden="true"></span>' : ""}${esc(rs.text)}</span>`
         : esc([card.issuer, card.updatedAt ? `Updated ${ago(card.updatedAt)}` : ""].filter(Boolean).join(" · "));
-    return `<li class="row ${open ? "open" : ""}" data-card="${esc(card.id)}">
-        <button type="button" class="row-main" data-act="toggle-card" data-id="${esc(card.id)}" aria-expanded="${open}">
-            <span class="card-dot" style="--dot:${issuerColor(card.issuer)}"></span>
-            <span><span class="row-title">${esc(card.displayName)}</span><span class="row-sub">${sub}</span></span>
-            <span class="row-end"><span class="row-value">${esc(balanceText(card))}</span></span>
+    return `<li class="row-wrap ${open ? "open" : ""}" data-card="${esc(card.id)}">
+        <button type="button" class="row row-button" data-act="toggle-card" data-id="${esc(card.id)}" aria-expanded="${open}">
+            <span class="dot" style="background:${issuerColor(card.issuer)}"></span>
+            <span class="row-main"><span class="row-title">${esc(card.displayName)}</span><span class="row-sub">${sub}</span></span>
+            <span class="row-amount">${esc(balanceText(card))}</span>
         </button>
         <div class="row-detail"><div><div class="row-detail-inner">
-            <dl class="facts">
-                <dt>Worth about</dt><dd>${esc(money(balanceValue(card)))}</dd>
-                ${card.annualFee > 0 ? `<dt>Annual fee</dt><dd>${esc(money(card.annualFee))}${fee ? ` · ${esc(shortDate(fee))}` : ""}</dd>` : ""}
-                ${override ? `<dt>Balance spot</dt><dd>${override.source === "user-picker" ? "Your pick" : "Learned"}</dd>` : ""}
+            <dl class="summary-list">
+                <div><dt>Worth about</dt><dd>${esc(money(Math.round(balanceValue(card))))}</dd></div>
+                ${card.annualFee > 0 ? `<div><dt>Annual fee</dt><dd>${esc(money(card.annualFee))}${fee ? ` · ${esc(shortDate(fee))}` : ""}</dd></div>` : ""}
+                ${override ? `<div><dt>Balance spot</dt><dd>${override.source === "user-picker" ? "Your pick" : "Learned"}</dd></div>` : ""}
             </dl>
-            <div class="actions">
-                <button type="button" class="btn-primary btn-xs" data-act="update" data-id="${esc(card.id)}">Update points</button>
-                <button type="button" class="btn-ghost btn-xs" data-act="sync-offers" data-id="${esc(card.id)}">Sync offers</button>
-                <button type="button" class="btn-ghost btn-xs" data-act="read-tab" data-id="${esc(card.id)}">Read this tab</button>
-                <button type="button" class="btn-ghost btn-xs" data-act="pick" data-id="${esc(card.id)}">Pick the balance</button>
+            <div class="action-row">
+                <button type="button" class="btn-primary btn-small" data-act="update" data-id="${esc(card.id)}">Update points</button>
+                <button type="button" class="btn-ghost btn-small" data-act="sync-offers" data-id="${esc(card.id)}">Sync offers</button>
+                <button type="button" class="btn-ghost btn-small" data-act="read-tab" data-id="${esc(card.id)}">Read this tab</button>
+                <button type="button" class="btn-ghost btn-small" data-act="pick" data-id="${esc(card.id)}">Pick the balance</button>
             </div>
         </div></div></div>
     </li>`;
 }
 
 function cardsPanel() {
-    if (!state.cards) return `<section class="panel">${placeholderRows()}</section>`;
-    if (!state.cards.length) return `<section class="panel"><p class="empty">No cards yet.</p>${foot(`${base()}/cards`, "Add a card in Finstracker")}</section>`;
+    const action = headLink(`${base()}/cards`, "All cards");
+    if (!state.cards) return panel("Your cards", action, placeholderRows());
+    if (!state.cards.length) return panel("Your cards", headLink(`${base()}/cards`, "Add a card"), emptyState("No cards yet"));
     const active = state.session?.cardId;
     const list = [...state.cards].sort((a, b) => (b.id === active) - (a.id === active) || String(a.displayName).localeCompare(String(b.displayName)));
-    return `<section class="panel"><ul class="rows">${list.map(cardRow).join("")}</ul>${foot(`${base()}/cards`, "All cards")}</section>`;
+    return panel("Your cards", action, `<div class="panel-body"><ul class="rows">${list.map(cardRow).join("")}</ul></div>`);
 }
 
-function creditRow(p, cardsById) {
-    const card = cardsById[p.cardId];
-    const sub = [card?.displayName, p.deadline ? `ends ${dueLabel(p.deadline, today())}` : "", p.capLabel].filter(Boolean).join(" · ");
-    return `<li class="row row-plain" data-credit="${esc(p.id)}"><div class="row-main">
-        <span><span class="row-title">${esc(baseTitle(p.title))}</span><span class="row-sub">${esc(sub)}</span></span>
-        <span class="row-end"><span class="row-value pos">${esc(money((p.valueCents || 0) / 100))}</span><button type="button" class="btn-ghost btn-xs" data-act="use-credit" data-id="${esc(p.id)}">Mark used</button></span>
-    </div></li>`;
-}
+const useRow = (kind, id, title, sub, amount) => `<li class="row" data-${kind}="${esc(id)}">
+    <div class="row-main"><div class="row-title">${esc(title)}</div><div class="row-sub">${esc(sub)}</div></div>
+    <span class="row-amount">${amount ? esc(amount) : ""}</span>
+    <button type="button" class="btn-ghost btn-small" data-act="use-${kind}" data-id="${esc(id)}">Mark used</button>
+</li>`;
 
 function creditsPanel() {
-    if (!state.credits || !state.cards) return `<section class="panel">${placeholderRows()}</section>`;
+    const action = headLink(`${base()}/perks?tab=perks`, "All benefits");
+    if (!state.credits || !state.cards) return panel("Credits to use", action, placeholderRows());
     const list = openCredits(state.credits, today());
+    if (!list.length) return panel("Credits to use", action, emptyState("No unused credits"));
     const byId = Object.fromEntries(state.cards.map((c) => [c.id, c]));
-    if (!list.length) return `<section class="panel"><p class="empty">No unused credits.</p>${foot(`${base()}/perks?tab=perks`, "Credits in Finstracker")}</section>`;
+    const row = (p) => useRow("credit", p.id, baseTitle(p.title), [byId[p.cardId]?.displayName, p.deadline ? `ends ${dueLabel(p.deadline, today())}` : "", p.capLabel].filter(Boolean).join(" · "), money((p.valueCents || 0) / 100));
     const soon = list.filter((p) => daysUntil(p.deadline, today()) <= 30), later = list.filter((p) => daysUntil(p.deadline, today()) > 30);
-    const group = (label, rows) => (rows.length ? `<li class="group-label">${label}</li>${rows.map((p) => creditRow(p, byId)).join("")}` : "");
-    return `<section class="panel"><ul class="rows">${group("Ending within 30 days", soon)}${group("Later", later)}</ul>${foot(`${base()}/perks?tab=perks`, "Credits in Finstracker")}</section>`;
+    const group = (label, rows) => (rows.length ? `<li class="eyebrow group-label">${label}</li>${rows.map(row).join("")}` : "");
+    return panel("Credits to use", action, `<div class="panel-body"><ul class="rows">${group("Ending within 30 days", soon)}${group("Later", later)}</ul></div>`);
 }
 
 function offersPanel() {
-    if (!state.offers || !state.cards) return `<section class="panel">${placeholderRows()}</section>`;
+    const action = headLink(`${base()}/perks?tab=offers`, "All offers");
+    if (!state.offers || !state.cards) return panel("Open offers", action, placeholderRows());
     const list = openOffers(state.offers, today());
+    if (!list.length) return panel("Open offers", action, emptyState("No open offers"));
     const byId = Object.fromEntries(state.cards.map((c) => [c.id, c]));
-    if (!list.length) return `<section class="panel"><p class="empty">No active offers.</p>${foot(`${base()}/perks?tab=offers`, "Offers in Finstracker")}</section>`;
-    return `<section class="panel"><ul class="rows">${list.map((o) => {
-        const sub = [byId[o.cardId]?.displayName, o.minSpendCents ? `on ${money(o.minSpendCents / 100)}+` : "", o.expiresAt ? `ends ${dueLabel(o.expiresAt, today())}` : ""].filter(Boolean).join(" · ");
-        return `<li class="row row-plain" data-offer="${esc(o.id)}"><div class="row-main">
-            <span><span class="row-title">${esc(o.merchant)}</span><span class="row-sub">${esc(sub)}</span></span>
-            <span class="row-end"><span class="row-value pos">${o.valueCents ? esc(money(o.valueCents / 100)) : ""}</span><button type="button" class="btn-ghost btn-xs" data-act="use-offer" data-id="${esc(o.id)}">Mark used</button></span>
-        </div></li>`;
-    }).join("")}</ul>${foot(`${base()}/perks?tab=offers`, "Offers in Finstracker")}</section>`;
+    return panel("Open offers", action, `<div class="panel-body"><ul class="rows">${list.map((o) => useRow("offer", o.id, o.merchant,
+        [byId[o.cardId]?.displayName, o.minSpendCents ? `on ${money(o.minSpendCents / 100)}+` : "", o.expiresAt ? `ends ${dueLabel(o.expiresAt, today())}` : ""].filter(Boolean).join(" · "),
+        o.valueCents ? money(o.valueCents / 100) : "")).join("")}</ul></div>`);
 }
 
 function homeView() {
@@ -268,37 +272,33 @@ function homeView() {
 
 function settingsView() {
     const s = state.settings;
-    const sw = (act, on, label) => `<button type="button" class="switch" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="${act}"></button>`;
-    const theme = (value, label) => `<button type="button" class="${s.theme === value ? "on" : ""}" data-act="theme" data-value="${value}" aria-pressed="${s.theme === value}">${label}</button>`;
+    const toggle = (act, on, label) => `<button type="button" class="toggle" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="${act}"><span class="toggle-thumb"></span></button>`;
+    const theme = (value, label) => `<button type="button" role="tab" aria-selected="${s.theme === value}" data-act="theme" data-value="${value}">${label}</button>`;
     const cards = state.cards || [];
     const picked = cards.find((c) => c.id === state.configureCard);
+    const line = (label, control) => `<li class="row"><div class="row-main"><div class="row-title">${esc(label)}</div></div>${control}</li>`;
     return `<div class="view" data-view="settings">
-        <section class="panel"><div class="panel-head"><h2>Sync</h2></div>
-            <div class="setting"><span class="setting-name">Offer to sync on card portals</span>${sw("toggle-autodetect", s.autoDetect, "Offer to sync on card portals")}</div>
-            <div class="setting"><span class="setting-name">Best card at checkout</span>${sw("toggle-checkout", s.checkoutHints, "Best card at checkout")}</div>
-        </section>
-        <section class="panel"><div class="panel-head"><h2>Appearance</h2></div>
-            <div class="setting"><span class="setting-name">Theme</span><span class="seg">${theme("system", "System")}${theme("light", "Light")}${theme("dark", "Dark")}</span></div>
-        </section>
-        <section class="panel"><div class="panel-head"><h2>Balance spots</h2></div>
-            <div class="stack">
-                <select class="select" data-act="configure-card" aria-label="Card">
-                    <option value="">Choose a card</option>
-                    ${cards.map((c) => `<option value="${esc(c.id)}" ${c.id === state.configureCard ? "selected" : ""}>${esc(c.displayName)} · ${esc(c.issuer)}</option>`).join("")}
-                </select>
-                ${picked ? `<div class="actions"><button type="button" class="btn-primary btn-xs" data-act="configure" data-id="${esc(picked.id)}">Open portal and pick</button>${state.overrides[picked.id] ? `<button type="button" class="btn-ghost btn-xs" data-act="reset-spot" data-id="${esc(picked.id)}">Reset</button>` : ""}</div>` : ""}
-            </div>
-        </section>
-        <section class="panel"><div class="panel-head"><h2>Account</h2></div>
-            <div class="setting"><span><span class="row-title">${esc(state.user?.username || state.user?.email || "Signed in")}</span>${state.apiBase !== PRODUCTION ? `<span class="row-sub">${esc(state.apiBase)}</span>` : ""}</span><button type="button" class="btn-ghost btn-xs btn-danger-text" data-act="signout">Sign out</button></div>
-        </section>
+        <h1 class="page-title">Settings</h1>
+        ${panel("Sync", "", `<div class="panel-body"><ul class="rows">
+            ${line("Offer to sync on card portals", toggle("toggle-autodetect", s.autoDetect, "Offer to sync on card portals"))}
+            ${line("Best card at checkout", toggle("toggle-checkout", s.checkoutHints, "Best card at checkout"))}
+        </ul></div>`)}
+        ${panel("Appearance", "", `<div class="panel-body"><ul class="rows">${line("Theme", `<div class="seg" role="tablist" aria-label="Theme">${theme("system", "System")}${theme("light", "Light")}${theme("dark", "Dark")}</div>`)}</ul></div>`)}
+        ${panel("Balance spots", "", `<div class="panel-body form-stack">
+            <select class="select" data-act="configure-card" aria-label="Card">
+                <option value="">Choose a card</option>
+                ${cards.map((c) => `<option value="${esc(c.id)}" ${c.id === state.configureCard ? "selected" : ""}>${esc(c.displayName)} · ${esc(c.issuer)}</option>`).join("")}
+            </select>
+            ${picked ? `<div class="action-row"><button type="button" class="btn-primary btn-small" data-act="configure" data-id="${esc(picked.id)}">Open portal and pick</button>${state.overrides[picked.id] ? `<button type="button" class="btn-ghost btn-small" data-act="reset-spot" data-id="${esc(picked.id)}">Reset</button>` : ""}</div>` : ""}
+        </div>`)}
+        ${panel("Account", "", `<div class="panel-body"><ul class="rows"><li class="row"><div class="row-main"><div class="row-title">${esc(state.user?.username || state.user?.email || "Signed in")}</div>${state.apiBase !== PRODUCTION ? `<div class="row-sub">${esc(state.apiBase)}</div>` : ""}</div><button type="button" class="btn-ghost btn-small btn-danger-text" data-act="signout">Sign out</button></li></ul></div>`)}
     </div>`;
 }
 
 function render() {
     const focused = document.activeElement?.closest?.("[data-act]");
     const focusKey = focused ? `${focused.dataset.act}|${focused.dataset.id || focused.dataset.tab || focused.dataset.value || ""}` : "";
-    const html = state.view === "signin" ? signinView() : state.view === "settings" ? settingsView() : state.view === "home" ? homeView() : `<div class="stats">${'<div class="ph ph-tile"></div>'.repeat(3)}</div><section class="panel">${placeholderRows()}</section>`;
+    const html = state.view === "signin" ? signinView() : state.view === "settings" ? settingsView() : state.view === "home" ? homeView() : `<div class="view">${statsBlock()}<section class="panel">${placeholderRows()}</section></div>`;
     app.innerHTML = html;
     // Only animate when the view itself changes, not on every refresh.
     const view = app.querySelector(".view");
@@ -378,8 +378,7 @@ const actions = {
     "toggle-card"(el) {
         const id = el.dataset.id;
         if (state.open.has(id)) state.open.delete(id); else state.open.add(id);
-        const row = el.closest(".row");
-        row.classList.toggle("open", state.open.has(id));
+        el.closest(".row-wrap").classList.toggle("open", state.open.has(id));
         el.setAttribute("aria-expanded", String(state.open.has(id)));
     },
     async update(el) {

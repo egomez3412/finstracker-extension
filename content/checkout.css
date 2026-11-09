@@ -1,13 +1,13 @@
-/* Best-card note at checkout; the card shell comes from prompt.css, injected alongside. */
-.fins-checkout .fins-prompt-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fins-checkout-rate { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #e9f6ef; }
-.fins-checkout-rate strong { color: #168b5c; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.fins-checkout-rate span { color: #4f5648; font-size: 12px; }
-.fins-checkout-next { margin-top: 8px; color: #4f5648; font-size: 12px; }
-.fins-checkout-offer { margin-top: 6px; padding-left: 10px; border-left: 2px solid #168b5c; font-size: 12px; font-weight: 500; }
-.fins-checkout-offer span { color: #4f5648; font-weight: 400; }
+/* Best-card note at checkout, laid out like the dashboard's summary card. The card shell and
+ * header come from prompt.css, injected alongside. */
+.fins-checkout-kicker { font-size: 12px; font-weight: 500; }
+.fins-checkout-card { overflow: hidden; font-size: 20px; font-weight: 600; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.fins-checkout-sub { margin-top: 2px; color: #4f5648; font-size: 12px; }
+.fins-checkout-rows { display: block; margin: 8px 0 0; }
+.fins-checkout-rows div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid #e5e8e1; font-size: 12px; }
+.fins-checkout-rows dt { overflow: hidden; color: #586159; text-overflow: ellipsis; white-space: nowrap; }
+.fins-checkout-rows dd { margin: 0; white-space: nowrap; }
 @media (prefers-color-scheme: dark) {
-    .fins-checkout-rate { background: #213a2e; }
-    .fins-checkout-rate strong { color: #5ccf98; }
-    .fins-checkout-rate span, .fins-checkout-next, .fins-checkout-offer span { color: #aebcb2; }
+    .fins-checkout-sub, .fins-checkout-rows dt { color: #aebcb2; }
+    .fins-checkout-rows div { border-top-color: #3c4940; }
 }

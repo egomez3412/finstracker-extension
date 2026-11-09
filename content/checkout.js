@@ -8,16 +8,21 @@
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     const host = document.createElement("div");
     host.id = "fins-checkout-root";
+    const rows = [
+        ...(p.next ? [[`Next best: ${p.next.name}`, `${p.next.rate} · ${p.next.cents}¢`]] : []),
+        ...(p.offers || []).map((o) => [o.title, o.cardName || ""]),
+    ];
     host.innerHTML = `
         <div class="fins-checkout" role="complementary" aria-label="Finstracker best card">
             <div class="fins-prompt-head">
                 <img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt="" width="20" height="20">
-                <span class="fins-prompt-title">Pay with ${esc(p.best.name)}</span>
+                <span class="fins-prompt-title">Finstracker</span>
                 <button class="fins-prompt-close" type="button" aria-label="Close">×</button>
             </div>
-            <div class="fins-checkout-rate"><strong>${esc(p.best.rate)}</strong><span>${esc(p.category)}${p.merchant ? ` at ${esc(p.merchant)}` : ""} · ${esc(p.best.cents)}¢ per $1</span></div>
-            ${p.next ? `<div class="fins-checkout-next">Next best: ${esc(p.next.name)}, ${esc(p.next.rate)}</div>` : ""}
-            ${(p.offers || []).map((o) => `<div class="fins-checkout-offer">${esc(o.title)}${o.cardName ? ` <span>· ${esc(o.cardName)}</span>` : ""}</div>`).join("")}
+            <div class="fins-checkout-kicker">Pay with</div>
+            <div class="fins-checkout-card">${esc(p.best.name)}</div>
+            <div class="fins-checkout-sub">${esc(p.best.rate)} · ${esc(p.category)}${p.merchant ? ` at ${esc(p.merchant)}` : ""} · ${esc(p.best.cents)}¢ per $1</div>
+            ${rows.length ? `<dl class="fins-checkout-rows">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : ""}
         </div>`;
     document.documentElement.appendChild(host);
     const root = host.firstElementChild;

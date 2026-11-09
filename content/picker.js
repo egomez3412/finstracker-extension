@@ -64,7 +64,7 @@
             let seg = cur.tagName.toLowerCase();
             const cls = (cur.className && typeof cur.className === "string")
                 ? cur.className.trim().split(/\s+/)
-                    .filter((c) => c && c.length < 40 && !/^\d/.test(c) && !/\d{3,}/.test(c))
+                    .filter((c) => c && c.length < 40 && !/^\d/.test(c) && !/\d{3,}/.test(c) && !/^fins-/.test(c))
                     .slice(0, 2)
                 : [];
             if (cls.length) seg += "." + cls.map((c) => CSS.escape(c)).join(".");
@@ -112,7 +112,7 @@
             <style>
                 :host, * { box-sizing: border-box; }
                 .hud {
-                    position: fixed; top: 12px; left: 12px;
+                    position: fixed; bottom: 16px; left: 16px;
                     max-width: 420px; min-width: 320px;
                     background: #ffffff; color: #1a1f17;
                     padding: 12px 14px;
@@ -174,9 +174,11 @@
 
         // Stop page-level event swallowing for anything inside the HUD.
         const hudRoot = shadow.querySelector(".hud");
+        // Bubble phase: the HUD's own buttons get the event first, then it stops before the page.
+        // (A capture-phase stop here would swallow the event before it reached the buttons.)
         const stop = (e) => { e.stopPropagation(); };
         for (const evt of ["mousedown", "mouseup", "click", "pointerdown", "pointerup"]) {
-            hudRoot.addEventListener(evt, stop, true);
+            hudRoot.addEventListener(evt, stop, false);
         }
 
         cancelBtn.addEventListener("click", (e) => {
@@ -334,6 +336,8 @@
         e.stopPropagation();
         if (e.stopImmediatePropagation) e.stopImmediatePropagation();
         const el = path.find((n) => n instanceof Element && !isInHud(n)) || e.target;
+        // Frames other than the top have no HUD to confirm in: a click there is the pick.
+        if (!isTop) { if (e.type === "mousedown") chooseElement(smartChoose(el)); return; }
         lockOn(el);
     }
 
@@ -362,7 +366,7 @@
     }
 
     function cleanup() {
-        console.log("[finstracker] picker cleanup");
+        window.__finsPickerCleanup = null;
         try { window.__finsPickerActive = false; } catch { /* noop */ }
         for (const t of [window, document]) {
             try { t.removeEventListener("mousemove", onMove, true); } catch { /* noop */ }
@@ -391,6 +395,7 @@
 
     // Capture-phase on WINDOW so we run before any document-level handler
     // banking SPAs install — window capture is the very first phase.
+    window.__finsPickerCleanup = cleanup; // lets the extension close the picker in every frame
     window.addEventListener("mousemove", onMove, true);
     window.addEventListener("mousedown", onPick, true);
     window.addEventListener("pointerdown", onPick, true);

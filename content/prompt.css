@@ -44,3 +44,11 @@
     .fins-prompt, .fins-checkout { transition: none; }
     .fins-prompt-spinner { animation: none; }
 }
+/* Status note during a sync (content/status.js) */
+.fins-status-line { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.fins-status-line strong { font-size: 14px; font-weight: 500; color: inherit; }
+.fins-status-value { margin: 2px 0 8px; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fins-status-value.is-ok { color: #168b5c; }
+.fins-status .fins-prompt-body:last-child { margin-bottom: 0; }
+.fins-status .fins-prompt-actions { flex-wrap: wrap; }
+@media (prefers-color-scheme: dark) { .fins-status-value.is-ok { color: #5ccf98; } }

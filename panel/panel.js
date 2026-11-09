@@ -150,11 +150,16 @@ function statusStrip() {
         title = offers ? s.statusLabel || "Offers saved" : s.status === "configured" ? "Balance spot saved" : `${s.cardName} synced`;
         if (!offers && s.lastScrape?.value != null) sub = Number(s.lastScrape.value).toLocaleString();
         buttons = btn("dismiss-session", "Done");
+    } else if (s.status === "confirm" && s.pending) {
+        icon = '<span class="dot" style="background:var(--selection-ink)" aria-hidden="true"></span>';
+        title = `Is this your ${s.cardName} balance?`;
+        sub = `${Number(s.pending.value).toLocaleString()} · highlighted on the page`;
+        buttons = btn("confirm-reading", `Use ${Number(s.pending.value).toLocaleString()}`, true) + btn("session-pick", "Pick another") + btn("dismiss-session", "Cancel");
     } else if (s.status === "error") {
         icon = '<span class="dot dot-bad" aria-hidden="true"></span>';
         title = `Couldn't sync ${s.cardName || ""}`;
         sub = s.lastError || "Something went wrong";
-        buttons = (offers ? "" : btn("session-pick", "Pick the balance", true)) + btn("dismiss-session", "Dismiss");
+        buttons = (offers ? "" : btn("session-pick", "Pick the balance", true) + btn("retry-session", "Try again")) + btn("dismiss-session", "Dismiss");
     } else {
         icon = '<span class="spinner" aria-hidden="true"></span>';
         title = s.statusLabel || `Syncing ${s.cardName || ""}`;
@@ -409,7 +414,7 @@ const actions = {
         setRowState(card.id, "syncing", `Opening ${card.issuer}…`);
         const r = await send({ type: "startCapture", card, mode: "auto" });
         if (!r.ok) setRowState(card.id, "error", r.error || "Couldn't start the sync");
-        else state.rowState.delete(card.id);
+        else { state.rowState.delete(card.id); render(); }
     },
     async "sync-offers"(el) {
         const card = cardById(el.dataset.id);
@@ -430,8 +435,8 @@ const actions = {
         if (handleSignedOut(r)) return;
         if (!r.ok) return setRowState(card.id, "error", r.error || "Couldn't read this tab");
         if (r.kind === "offers") { setRowState(card.id, "success", `${r.created || 0} new offers, ${r.updated || 0} updated`); loadOffers(); return; }
-        setRowState(card.id, "success", r.noop ? `Already at ${Number(r.target).toLocaleString()}` : `${Number(r.current).toLocaleString()} → ${Number(r.target).toLocaleString()}`);
-        loadCards({ fresh: true });
+        state.rowState.delete(card.id); // the status area above follows the read from here
+        render();
     },
     async pick(el) {
         const card = cardById(el.dataset.id);
@@ -454,6 +459,11 @@ const actions = {
         if (!r.ok) toast(r.error || "Couldn't open the picker", { kind: "error" });
     },
     async "dismiss-session"() { await send({ type: "cancelCapture" }); },
+    async "confirm-reading"() {
+        const r = await send({ type: "confirmReading" });
+        if (!r.ok) toast(r.error || "Couldn't save the balance", { kind: "error" });
+    },
+    async "retry-session"() { await send({ type: "retryCapture" }); },
     "use-credit"(el) { markCredit(el.dataset.id, true); },
     "use-offer"(el) { markOffer(el.dataset.id, true); },
     async "toggle-autodetect"() { await setState({ autoDetect: !state.settings.autoDetect }); },

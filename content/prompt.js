@@ -62,9 +62,8 @@
         try {
             const r = await chrome.runtime.sendMessage({ type: "syncFromActiveTab", card, tabId: null });
             if (!r?.ok) { setStatus(r?.error || "Sync failed", "error"); busy(false); return; }
-            if (r.kind === "offers") setStatus(`${r.received || r.offers} offers saved`, "ok");
-            else setStatus(r.noop ? `Up to date: ${Number(r.target).toLocaleString()}` : `${Number(r.current).toLocaleString()} → ${Number(r.target).toLocaleString()}`, "ok");
-            setTimeout(close, 2600);
+            if (r.kind === "offers") { setStatus(`${r.received || r.offers} offers saved`, "ok"); setTimeout(close, 2600); return; }
+            close(); // the status note takes over while the page is read
         } catch (err) {
             setStatus(err?.message || "Sync failed", "error");
             busy(false);

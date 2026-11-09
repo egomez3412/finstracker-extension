@@ -8,14 +8,15 @@
 import { cleanOverrides } from "./lib/portals.js";
 import { PRODUCTION } from "./lib/storage.js";
 import { onExternalMessage } from "./lib/worker/auth-bridge.js";
-import { forgetTab, onCaptureTabNavigated } from "./lib/worker/capture.js";
+import { onTabClosed, processTab } from "./lib/worker/capture.js";
 import { onMessage } from "./lib/worker/router.js";
 import { forgetTabHints, onTabVisited } from "./lib/worker/site-hints.js";
 
 async function onNavigated(tabId, url, finished) {
+    if (!finished) return; // read pages once they have loaded, not while they unload
     try {
-        await onCaptureTabNavigated(tabId, url);
-        if (finished) await onTabVisited(tabId, url);
+        processTab(tabId, url).catch((err) => console.warn("[finstracker] read failed", err));
+        await onTabVisited(tabId, url);
     } catch (err) {
         console.warn("[finstracker] navigation handler", err);
     }
@@ -33,7 +34,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-    forgetTab(tabId);
+    onTabClosed(tabId);
     forgetTabHints(tabId);
 });
 

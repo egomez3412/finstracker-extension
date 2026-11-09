@@ -44,13 +44,13 @@ To update: `git pull`, then click **Reload** on the extension in `chrome://exten
 
 ## How a points sync works
 
-1. **Update points** opens the card's page: the page where its balance was found last time, or else the sign-in page of the site that holds its points. Co-branded cards go to the airline or hotel (Delta, United, Southwest, American, Alaska, JetBlue, Aeroplan, British Airways, Flying Blue, Marriott, Hilton, Hyatt, IHG, Wyndham, Choice, Amazon, Bilt); other cards go to their bank (Amex, Chase, Capital One, Citi, Discover, Wells Fargo, Bank of America, U.S. Bank, Barclays).
-2. You sign in. Passwords, passkeys and codes are yours to enter; the extension never touches them and keeps waiting while you do.
-3. If the balance is not on the page you land on, the extension opens the card's rewards page, then follows the site's own rewards links ("Ultimate Rewards", "SkyMiles", "View rewards"), up to three steps, on the same site only.
-4. It reads the balance, preferring numbers next to the card's name and program, so a page listing several cards gives each card its own number, and posts the difference to Finstracker: an `earn` when the portal shows more, a `redeem` when it shows less.
-5. The page and spot that worked are remembered for that card.
+1. **Update points** uses a tab that is already on the card's site. Otherwise it opens the page where the balance was found last time, or the sign-in page of the site that holds the points. Co-branded cards go to the airline or hotel (Delta, United, Southwest, American, Alaska, JetBlue, Aeroplan, British Airways, Flying Blue, Marriott, Hilton, Hyatt, IHG, Wyndham, Choice, Amazon, Bilt); other cards go to their bank (Amex, Chase, Capital One, Citi, Discover, Wells Fargo, Bank of America, U.S. Bank, Barclays). **Read this tab** does the same on the tab you are looking at.
+2. A small Finstracker note on the page says what is happening. On a sign-in or verification page it waits for you; passwords, passkeys and codes are yours to enter.
+3. Once you are in, it reads the page. No balance there → it opens the card's rewards page, then follows the site's own rewards links ("Ultimate Rewards", "SkyMiles", "View rewards"), up to three steps, on the same site only.
+4. It prefers numbers next to the card's name and program, so a page listing several cards gives each card its own number. Dollar amounts, statement balances and masked account numbers are skipped.
+5. The first time, the number is highlighted and the note asks **Is this your balance?** (also shown in the side panel). **Use it** posts the difference to Finstracker; **Pick another** lets you click the right number. That spot is then trusted, and later syncs post without asking.
 
-If a card's points are somewhere else, open that page and choose **Use this tab** on the card (or **Pick the balance** to click the number itself). **Read this tab** works on any site; the extension asks for access to a site the first time.
+**Use this tab** makes the open page a card's rewards page. Pages and spots are remembered per card; **Settings › Rewards pages › Reset** forgets them.
 
 ## Code layout
 
@@ -60,7 +60,8 @@ No build step: the folder is the extension.
 manifest.json
 background.js              Service worker: connects Chrome events to lib/worker
 panel/                     Side panel (panel.html, panel.css, panel.js)
-content/                   On-page widgets: sync prompt, checkout note, element picker
+content/                   Page scripts: reader (finds balances and rewards links), status note,
+                           sync prompt, checkout note, element picker
 lib/
   api.js                   Finstracker REST API client
   storage.js               chrome.storage.local keys and defaults
@@ -70,7 +71,7 @@ lib/
   merchants.js             Website → spending category, checkout detection, offer matching
   best-card.js             Ranking cards by value per dollar
   benefits.js              Credits, offers and annual fee summaries
-  inject/                  Functions run inside issuer pages (balance reader, watcher, offers reader, rewards-link finder)
+  inject/offers.js         Offer-tile reader run inside issuer offer pages
   worker/                  Service worker parts: capture, offers sync, site hints, messages, sign-in
 portals.json               Issuer and card presets
 fonts/                     Inter and Fraunces (SIL Open Font License)
@@ -83,11 +84,20 @@ Run the tests with Node 20 or newer:
 npm test
 ```
 
+End-to-end tests load the extension in Chromium and sync from a fake bank (sign-in, a dashboard without the balance, a rewards page listing two cards, strict Content-Security-Policy):
+
+```bash
+npm install && npx playwright install chromium
+npm run e2e -- update
+npm run e2e -- existing
+npm run e2e -- picker
+```
+
 ## Security model
 
 - The session token lives only in `chrome.storage.local` and is sent as `Authorization: Bearer …` to Finstracker. It is never put into any web page.
 - Sign-in happens on finstracker.com in a normal tab, which hands the token to this extension by its ID. Only Finstracker's own origins can do that (`externally_connectable`).
-- Page readers run with `chrome.scripting.executeScript` and return only the text of the balance or offer tiles. They do not read form fields, cookies or tokens.
+- Page scripts run in the extension's isolated world (so bank pages' Content-Security-Policy cannot block them, and page scripts cannot see them) and return only the text of the balance or offer tiles. They do not read form fields, cookies or tokens.
 - Host access is limited to Finstracker, the supported banks and the airline, hotel and shop programs above. Other sites are asked for one at a time, only when you use Read this tab, Pick the balance or Use this tab there. Checkout notes need broader site access, which is optional, asked for only when you turn the feature on, and given back when you turn it off.
 - Finstracker re-checks every posted amount on the server (a redeem cannot exceed the balance, amounts must be valid numbers).
 

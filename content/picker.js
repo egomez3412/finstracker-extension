@@ -129,10 +129,31 @@
             `}`;
     }
 
+    // Not a balance: footers, copyright and legal lines, phone numbers, dates and bare years.
+    function notABalance(el) {
+        for (let node = el, d = 0; node && d < 14; node = node.parentElement, d++) {
+            if (node.tagName === "FOOTER" || node.getAttribute?.("role") === "contentinfo") return "copyright or footer text";
+            if (/footer|legal|copyright|disclos|disclaimer/i.test(`${node.id || ""} ${typeof node.className === "string" ? node.className : ""}`)) return "copyright or footer text";
+        }
+        const t = textOf(el);
+        if (/©|copyright|all rights reserved|member fdic/i.test(t)) return "copyright text";
+        if (/\b1[-.\s]?\d{3}[-.\s]\d{3}[-.\s]\d{4}\b|\(\d{3}\)\s*\d{3}[-.\s]\d{4}/.test(t)) return "a phone number";
+        const n = firstNumber(t);
+        if (n && /^(19[5-9]\d|20\d{2})$/.test(n.raw) && !/(pts?|points?|miles?)\b/i.test(t)) return "a year";
+        if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+(19|20)\d{2}\b|\b\d{1,2}\/\d{1,2}\/(19|20)?\d{2}\b/i.test(t) && n && t.replace(/[^\d]/g, "").length <= 8) return "a date";
+        return null;
+    }
+
     function choose(el) {
         const target = numberElement(el);
         if (!target) {
             message = "That spot has no number. Click the balance itself.";
+            render();
+            return;
+        }
+        const noise = notABalance(target);
+        if (noise) {
+            message = `That's ${noise}, not a balance. Click the balance itself.`;
             render();
             return;
         }
@@ -183,7 +204,8 @@
         const target = numberElement(el);
         if (hoverEl !== (target || el)) { unoutline(hoverEl); hoverEl = target || el; if (hoverEl !== chosenEl) outline(hoverEl, "hover"); }
         const n = target ? firstNumber(textOf(target)) : null;
-        showTag(e.clientX, e.clientY, n ? `${n.raw} · click to pick` : "No number here", Boolean(n));
+        const bad = target ? notABalance(target) : null;
+        showTag(e.clientX, e.clientY, bad ? `Not a balance (${bad})` : n ? `${n.raw} · click to pick` : "No number here", Boolean(n) && !bad);
     }
     function onDown(e) {
         if (inGuide(e)) return; // the guide's own buttons

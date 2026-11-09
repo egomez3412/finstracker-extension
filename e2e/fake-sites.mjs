@@ -102,7 +102,7 @@ export function startServer({ port = 3000 } = {}) {
                 }
                 return n;
             }
-            function draw() {
+            var draw = function () {
                 const root = document.getElementById("root");
                 root.replaceChildren(nav());
                 if (location.pathname !== "/bank/dashboard") root.append(switcher());
@@ -177,11 +177,22 @@ export function startServer({ port = 3000 } = {}) {
                     if (acct === "c3") root.append(tile([["Dining Credit"], ["$10 of $10 used"]]));
                     else root.append(tile([["Uber Cash"], ["$10 of $10 used"]]), tile([["Digital Entertainment Credit"], ["$5 of $20 used"]]));
                 }
-            }
+            };
+            // Every page ends with a footer full of numbers that are not balances, plus a stray copyright line.
+            const drawn = draw;
+            draw = function () {
+                drawn();
+                const root = document.getElementById("root");
+                if (location.pathname === "/bank/no-balance") root.append(el("h2", "Membership Rewards"), el("p", "Your points summary is updating."));
+                root.append(el("div", "© 2026 Mock Bank, N.A."));
+                const f = el("footer");
+                f.append(el("p", "© 2026 Mock Bank. All rights reserved."), el("a", "Membership Rewards terms"), el("p", "Questions? Call 1-800-528-4800"), el("p", "Member since 2015"), el("p", "Rewards updated Nov 8, 2026"));
+                root.append(f);
+            };
             setTimeout(draw, 1200);`, h);
         if (p === "/bank/login" && req.method === "POST") { res.writeHead(302, { location: "/bank/dashboard", "set-cookie": "bank=1; Path=/" }); return res.end(); }
         const signedIn = /(^|;\s*)bank=1/.test(req.headers.cookie || "");
-        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits"];
+        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance"];
         if (pages.includes(p) && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }
         if (p === "/bank/login") return send(res, 200, "text/html", page("Sign in", `<form method="post" action="/bank/login"><input name="user" autocomplete="username"><input type="password" name="pw"><button>Sign in</button></form>`), h);
         if (p === "/bank/rewards") h["content-security-policy"] = `${csp}; require-trusted-types-for 'script'`;

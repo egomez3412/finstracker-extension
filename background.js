@@ -33,6 +33,11 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
     if (details?.frameId === 0) onNavigated(details.tabId, details.url, true);
 });
 
+// A new document in the tab: anything we drew on the old one is gone.
+chrome.webNavigation.onCommitted.addListener((details) => {
+    if (details?.frameId === 0) forgetTabHints(details.tabId);
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
     onTabClosed(tabId);
     forgetTabHints(tabId);

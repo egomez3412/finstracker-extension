@@ -26,17 +26,31 @@ export function startServer({ port = 3000 } = {}) {
     }
     const h = { "content-security-policy": csp, "cache-control": "no-store" };
     if (p === "/bank/app.js") return send(res, 200, "text/javascript", `
-      // Single-page dashboard: content arrives late, like real bank portals.
-      const route = location.pathname;
-      setTimeout(() => {
+      // Single-page app: content arrives late, links navigate in-app (like Amex), DOM built without innerHTML
+      // so it also runs under Trusted Types.
+      const el = (tag, text, style) => { const n = document.createElement(tag); if (text) n.textContent = text; if (style) n.style.cssText = style; return n; };
+      const tile = (lines) => { const d = el("div"); d.className = "tile"; for (const [t, big] of lines) d.append(el("div", t, big ? "font-size:28px" : "")); return d; };
+      function draw() {
         const root = document.getElementById("root");
-        if (route === "/bank/dashboard") root.innerHTML = '<nav><a href="/bank/help">Help</a> <a href="/bank/offers">Offers</a> <a href="/bank/rewards">Ultimate Rewards</a></nav><div class="tile"><div>Sapphire Preferred (...9876)</div><div>Current balance</div><div style="font-size:28px">$1,111.00</div></div>';
-        if (route === "/bank/rewards") root.innerHTML = '<div class="tile"><div>Freedom Unlimited (...1234)</div><div>Cash back rewards</div><div style="font-size:28px">12,345</div><div>points</div></div><div class="tile"><div>Sapphire Preferred (...9876)</div><div>Ultimate Rewards</div><div style="font-size:28px">98,765</div><div>points</div></div>';
-      }, 1200);`, h);
+        root.replaceChildren();
+        if (location.pathname === "/bank/dashboard") {
+          const nav = el("nav");
+          for (const [href, text, spa] of [["/bank/help", "Help"], ["/bank/offers", "Offers"], ["/bank/rewards?opaqueAccountId=OQX90", "Ultimate Rewards"], ["/bank/rewards?opaqueAccountId=OQX90", "Rewards (in-app)", true]]) {
+            const a = el("a", text); a.href = href; if (spa) { a.id = "spa-link"; a.addEventListener("click", (e) => { e.preventDefault(); history.pushState({}, "", href); setTimeout(draw, 800); }); }
+            nav.append(a, " ");
+          }
+          root.append(nav, tile([["Sapphire Preferred (...9876)"], ["Current balance"], ["$1,111.00", true]]));
+          if (location.search.includes("promo")) root.append(tile([["Welcome offer"], ["2,000", true], ["bonus points"]]));
+        } else if (location.pathname === "/bank/rewards") {
+          root.append(tile([["Freedom Unlimited (...1234)"], ["Cash back rewards"], ["12,345", true], ["points"]]), tile([["Sapphire Preferred (...9876)"], ["Ultimate Rewards"], ["98,765", true], ["points"]]));
+        }
+      }
+      setTimeout(draw, 1200);`, h);
     if (p === "/bank/login" && req.method === "POST") { res.writeHead(302, { location: "/bank/dashboard", "set-cookie": "bank=1; Path=/" }); return res.end(); }
     const signedIn = /(^|;\s*)bank=1/.test(req.headers.cookie || "");
     if ((p === "/bank/dashboard" || p === "/bank/rewards") && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }
     if (p === "/bank/login") return send(res, 200, "text/html", page("Sign in", `<form method="post" action="/bank/login"><input name="user" autocomplete="username"><input type="password" name="pw"><button>Sign in</button></form>`), h);
+    if (p === "/bank/rewards") h["content-security-policy"] = `${csp}; require-trusted-types-for 'script'`;
     if (p === "/bank/dashboard" || p === "/bank/rewards") return send(res, 200, "text/html", page("Bank", `<div id="root">Loading…</div><script src="/bank/app.js"></script>`), h);
     return send(res, 404, "text/plain", "not found");
   });

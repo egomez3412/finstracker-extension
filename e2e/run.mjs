@@ -122,6 +122,43 @@ try {
     const { portalOverrides } = await sw.evaluate(() => chrome.storage.local.get("portalOverrides"));
     log("transactions:", JSON.stringify(state.transactions), "spot:", portalOverrides.c1?.selector, portalOverrides.c1?.source);
     ok = state.points === 98765 && portalOverrides.c1?.source === "user-picker";
+  } else if (scenario === "amex") {
+    // Signed in, browsing the bank: the sync prompt shows on the dashboard, again after a full page
+    // load to /rewards?opaqueAccountId=…, and stays through in-app route changes.
+    bank = await ctx.newPage();
+    const prompt = () => bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | ") || null);
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);
+    await bank.waitForURL(/dashboard/); await sleep(2500);
+    const onDashboard = await prompt(); log("prompt on dashboard:", onDashboard);
+    await bank.click("text=Ultimate Rewards"); await bank.waitForURL(/rewards/); await sleep(2500);
+    const onRewards = await prompt(); log("prompt after page load to", bank.url(), ":", onRewards);
+    await bank.goto("http://localhost:3000/bank/dashboard"); await sleep(2500);
+    await bank.click("#spa-link"); await sleep(2500);
+    const afterSpa = await prompt(); log("prompt after in-app route change to", bank.url(), ":", afterSpa);
+    // Sync from the prompt on the rewards page (Trusted Types page): status note, confirm, post.
+    await bank.goto("http://localhost:3000/bank/rewards?opaqueAccountId=OQX90"); await sleep(2500);
+    await bank.click('#fins-prompt-root [data-act="sync"]');
+    const s = await waitFor((s) => s?.status === "confirm", "confirm on rewards page");
+    log("note:", await note(bank));
+    await bank.click('#fins-status-root [data-action="confirm"]');
+    await waitFor(() => state.transactions.length > 0, "transaction");
+    const { rewardsPages } = await sw.evaluate(() => chrome.storage.local.get("rewardsPages"));
+    log("saved page:", rewardsPages.c1?.url);
+    ok = Boolean(onDashboard && onRewards && afterSpa) && s.pending?.value === 98765 && state.points === 98765 && /opaqueAccountId=OQX90/.test(rewardsPages.c1?.url || "");
+  } else if (scenario === "wander") {
+    // "Is this your balance?" shows a wrong number on the dashboard; the user goes to the rewards
+    // page instead, and the extension reads that page.
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/dashboard?promo=1"); await sleep(1500);
+    await panel.bringToFront(); await bank.bringToFront();
+    await panel.click('[data-act="read-tab"][data-id="c1"]').catch(() => {});
+    const first = await waitFor((s) => s?.status === "confirm" || s?.status === "error", "first read");
+    log("first read:", first.status, first.pending?.value ?? first.lastError, first.currentUrl);
+    await bank.click("#spa-link");
+    const s = await waitFor((s) => s?.status === "confirm" && s.pending?.value === 98765, "read after moving to rewards", 30000);
+    log("after moving:", s.status, s.pending?.value, s.currentUrl);
+    ok = first.pending?.value === 2000 && s.pending?.value === 98765;
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

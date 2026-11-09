@@ -94,6 +94,8 @@ npm run e2e -- update
 npm run e2e -- existing
 npm run e2e -- picker
 npm run e2e -- guided
+npm run e2e -- amex     # prompt across page loads and in-app routes, Trusted Types page
+npm run e2e -- wander   # moving to another page while "Is this your balance?" is up
 ```
 
 ## Security model

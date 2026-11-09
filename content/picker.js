@@ -1,405 +1,290 @@
-// extension/content/picker.js — injected into a portal tab (all frames) when
-// the user clicks "Pick element manually". Highlights elements on hover and
-// shows a live preview of the element's text plus any detected number; on
-// click, walks up to the smallest ancestor that actually contains a number
-// (so users can click the value or its label without thinking), computes a
-// stable CSS selector and ships it back to the service worker.
-//
-// Why this is built the way it is:
-//   - Banking SPAs (Chase especially) attach aggressive capture-phase click
-//     handlers on `document` that stopImmediatePropagation. To beat them
-//     reliably we attach our listeners to `window` in capture phase — those
-//     fire BEFORE any document-level handler regardless of registration
-//     order.
-//   - The HUD lives inside a closed shadow root so the host page can't
-//     restyle it, can't intercept its events, and our buttons remain
-//     clickable even if the page sets `pointer-events: none` on body.
-
+/* Finstracker balance picker: a guided, two-step way to point at a card's balance.
+ *   Step 1: suggestions (the likeliest numbers, numbered on the page) or click any number.
+ *           Hovering shows the number that would be picked.
+ *   Step 2: "Use 98,765 for Sapphire Preferred?" → Use it / Pick again.
+ * Injected into every frame (isolated world) with window.__finsPickerPayload =
+ * { cardName, unit, hints, canNavigate }. The guide lives in the top frame; in other frames a click
+ * is the pick. Messages: pickerResult { selector, text, url }, cancelCapture, pickerNavigate.
+ *
+ * Banking pages often stop clicks at the document, so listeners sit on window in capture phase.
+ * The guide is in a closed shadow root so page styles and scripts cannot reach it. */
 (function () {
     if (window.__finsPickerActive) return;
     window.__finsPickerActive = true;
+    const payload = window.__finsPickerPayload || {};
+    const cardName = payload.cardName || "card";
+    const isTop = window.top === window.self;
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const send = (msg) => { try { chrome.runtime.sendMessage(msg, () => void chrome.runtime.lastError); } catch { /* extension reloaded */ } };
 
-    let lastHover = null;
-    let lastChosen = null;
-    let locked = false;
-    let lockedEl = null;
-
-    function pickText(el) {
-        if (!el) return "";
-        return (el.innerText || el.textContent || "").trim();
-    }
-
+    function textOf(el) { return el ? (el.innerText || el.textContent || "").replace(/[    ]/g, " ").trim() : ""; }
     function firstNumber(text) {
-        if (!text) return null;
-        const m = String(text).match(/-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?/);
+        const m = String(text || "").match(/-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?/);
         if (!m) return null;
         const n = Number(m[0].replace(/,/g, ""));
         return Number.isFinite(n) ? { raw: m[0], n } : null;
     }
-
-    function smartChoose(el) {
+    // The smallest element around the click that holds a number (clicking a label works too).
+    function numberElement(el) {
         let cur = el;
-        for (let d = 0; d < 5 && cur; d++) {
-            if (firstNumber(pickText(cur))) return cur;
+        for (let d = 0; d < 5 && cur && cur.nodeType === 1; d++) {
+            const t = textOf(cur);
+            if (t.length <= 60 && firstNumber(t)) return cur;
             cur = cur.parentElement;
         }
-        return el;
+        return null;
     }
-
+    // A precise path to the element; ignores our own classes.
     function cssPath(el) {
-        if (!(el instanceof Element)) return null;
-        if (el.id && /^[A-Za-z][\w-]*$/.test(el.id)) return `#${CSS.escape(el.id)}`;
-        const testId = el.getAttribute("data-testid");
-        if (testId) return `[data-testid="${CSS.escape(testId)}"]`;
-        const ptName = el.getAttribute("data-pt-name");
-        if (ptName) return `[data-pt-name="${CSS.escape(ptName)}"]`;
-        const dataCy = el.getAttribute("data-cy");
-        if (dataCy) return `[data-cy="${CSS.escape(dataCy)}"]`;
-        const label = el.getAttribute("aria-label");
-        if (label && label.length < 80) return `${el.tagName.toLowerCase()}[aria-label="${CSS.escape(label)}"]`;
-
+        const attr = (node) => {
+            if (node.id && /^[A-Za-z][\w-]*$/.test(node.id)) return `#${CSS.escape(node.id)}`;
+            for (const name of ["data-testid", "data-pt-name", "data-cy"]) {
+                const v = node.getAttribute && node.getAttribute(name);
+                if (v) return `[${name}="${CSS.escape(v)}"]`;
+            }
+            return null;
+        };
         const parts = [];
         let cur = el;
-        for (let depth = 0; cur && cur.nodeType === 1 && depth < 5; depth++) {
+        for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+            const own = attr(cur);
+            if (own) { parts.unshift(own); break; }
             let seg = cur.tagName.toLowerCase();
-            const cls = (cur.className && typeof cur.className === "string")
-                ? cur.className.trim().split(/\s+/)
-                    .filter((c) => c && c.length < 40 && !/^\d/.test(c) && !/\d{3,}/.test(c) && !/^fins-/.test(c))
-                    .slice(0, 2)
-                : [];
+            const cls = typeof cur.className === "string" ? cur.className.trim().split(/\s+/).filter((c) => c && c.length < 40 && !/^\d/.test(c) && !/\d{3,}/.test(c) && !/^fins-/.test(c)).slice(0, 2) : [];
             if (cls.length) seg += "." + cls.map((c) => CSS.escape(c)).join(".");
             const parent = cur.parentElement;
             if (parent) {
-                const sameTag = Array.from(parent.children).filter((s) => s.tagName === cur.tagName);
-                if (sameTag.length > 1) {
-                    const idx = sameTag.indexOf(cur) + 1;
-                    seg += `:nth-of-type(${idx})`;
-                }
+                const same = Array.from(parent.children).filter((n) => n.tagName === cur.tagName);
+                if (same.length > 1) seg += `:nth-of-type(${same.indexOf(cur) + 1})`;
             }
             parts.unshift(seg);
-            if (cur.id && /^[A-Za-z][\w-]*$/.test(cur.id)) {
-                parts[0] = `#${CSS.escape(cur.id)}`;
-                break;
-            }
-            cur = cur.parentElement;
+            if (!parent || parent === document.body || parent === document.documentElement) break;
+            cur = parent;
         }
         return parts.join(" > ");
     }
 
-    const isTop = window.top === window.self;
-    let host = null;
-    let shadow = null;
-    let previewEl = null;
-    let confirmBtn = null;
-    let cancelBtn = null;
-    let pickAgainBtn = null;
-    let statusEl = null;
-    let dotEl = null;
+    let host = null, shadow = null, hud = null, tag = null;
+    let hoverEl = null, chosenEl = null, step = 1, message = "", lastPointerDown = 0;
+    let suggestions = [];
+    let observer = null;
+    const marks = [];
 
-    if (isTop) {
-        host = document.createElement("div");
-        host.id = "fins-picker-host";
-        host.style.position = "fixed";
-        host.style.zIndex = "2147483647";
-        host.style.top = "0";
-        host.style.left = "0";
-        host.style.width = "0";
-        host.style.height = "0";
-        host.style.pointerEvents = "none";
-        (document.body || document.documentElement).appendChild(host);
-        shadow = host.attachShadow({ mode: "closed" });
-        shadow.innerHTML = `
-            <style>
-                :host, * { box-sizing: border-box; }
-                .hud {
-                    position: fixed; bottom: 16px; left: 16px;
-                    max-width: 420px; min-width: 320px;
-                    background: #ffffff; color: #1a1f17;
-                    padding: 12px 14px;
-                    border: 1px solid #e5e8e1;
-                    border-left: 3px solid #1d6b4a;
-                    border-radius: 10px;
-                    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-                    box-shadow: 0 8px 28px rgba(26, 31, 23, 0.16);
-                    pointer-events: auto;
-                }
-                .hud b, .hud strong { color: #1d6b4a; }
-                .row { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-                .status { margin-top: 6px; font-size: 11px; color: #4f5648; }
-                button {
-                    background: #ffffff; color: #1a1f17;
-                    border: 1px solid #e5e8e1;
-                    border-radius: 8px;
-                    padding: 6px 12px;
-                    cursor: pointer;
-                    font: inherit; font-weight: 600;
-                }
-                button:hover { background: #f3f4f0; }
-                button.primary { background: #1d6b4a; color: #ffffff; border-color: #1d6b4a; }
-                button.primary:hover { background: #144f37; border-color: #144f37; }
-                button:disabled { opacity: 0.55; cursor: not-allowed; }
-                .preview {
-                    margin-top: 8px; padding: 8px 10px;
-                    background: #f7f7f4; border: 1px solid #e5e8e1;
-                    border-radius: 6px; font-size: 12px;
-                    max-height: 80px; overflow: hidden; word-break: break-word;
-                }
-                .preview .num { color: #1d6b4a; font-weight: 700; }
-                .preview .empty { color: #4f5648; font-style: italic; }
-                .title { display: flex; align-items: center; gap: 6px; }
-                .dot { width: 8px; height: 8px; border-radius: 999px; background: #1d6b4a; display: inline-block; }
-                .dot.green { background: #087487; }
-            </style>
-            <div class="hud" role="dialog" aria-label="Finstracker picker">
-                <div class="title">
-                    <span class="dot" id="finsDot"></span>
-                    <strong>Finstracker</strong>
-                    <span style="color:#4f5648;font-size:11px;">click the points value on this page</span>
-                </div>
-                <div class="preview" id="finsPreview"><span class="empty">Hover over the points value…</span></div>
-                <div class="row">
-                    <button type="button" class="primary" id="finsConfirm" disabled>Use this value</button>
-                    <button type="button" id="finsPickAgain" hidden>Pick another</button>
-                    <button type="button" id="finsCancel">Cancel</button>
-                </div>
-                <div class="status" id="finsStatus">Tip: press Esc to cancel, Enter to confirm.</div>
-            </div>
-        `;
-        previewEl = shadow.getElementById("finsPreview");
-        confirmBtn = shadow.getElementById("finsConfirm");
-        cancelBtn = shadow.getElementById("finsCancel");
-        pickAgainBtn = shadow.getElementById("finsPickAgain");
-        statusEl = shadow.getElementById("finsStatus");
-        dotEl = shadow.getElementById("finsDot");
+    function refreshSuggestions() {
+        let next = [];
+        try { next = window.__finsReader?.suggestions(payload.unit || "points", payload.hints || null, 3) || []; } catch { next = []; }
+        const same = next.length === suggestions.length && next.every((n, i) => n.el === suggestions[i].el);
+        if (same && hud?.innerHTML) return;
+        clearMarks();
+        suggestions = next;
+        showMarks();
+        render();
+    }
 
-        // Stop page-level event swallowing for anything inside the HUD.
-        const hudRoot = shadow.querySelector(".hud");
-        // Bubble phase: the HUD's own buttons get the event first, then it stops before the page.
-        // (A capture-phase stop here would swallow the event before it reached the buttons.)
-        const stop = (e) => { e.stopPropagation(); };
-        for (const evt of ["mousedown", "mouseup", "click", "pointerdown", "pointerup"]) {
-            hudRoot.addEventListener(evt, stop, false);
+    // ---- page decorations: hover outline, chosen outline, numbered suggestion badges ----
+    function outline(el, kind) {
+        if (!el) return;
+        el.classList.add(kind === "chosen" ? "fins-picker-locked" : "fins-picker-hover");
+    }
+    function unoutline(el) { el?.classList.remove("fins-picker-hover", "fins-picker-locked"); }
+    function placeMarks() {
+        for (const m of marks) {
+            if (!m.el.isConnected) { m.badge.style.display = "none"; continue; }
+            const r = m.el.getBoundingClientRect();
+            Object.assign(m.badge.style, { display: "grid", left: `${Math.max(2, r.left - 12)}px`, top: `${Math.max(2, r.top - 12)}px` });
         }
-
-        cancelBtn.addEventListener("click", (e) => {
-            console.log("[finstracker] cancel clicked");
-            e.preventDefault();
-            cancelPicker();
+    }
+    function showMarks() {
+        suggestions.forEach((s, i) => {
+            const badge = document.createElement("div");
+            badge.className = "fins-picker-badge";
+            badge.textContent = String(i + 1);
+            document.documentElement.appendChild(badge);
+            s.el.classList.add("fins-picker-suggested");
+            marks.push({ el: s.el, badge });
         });
-        confirmBtn.addEventListener("click", (e) => {
-            console.log("[finstracker] confirm clicked", { locked, hasLockedEl: !!lockedEl, hasLastChosen: !!lastChosen });
-            e.preventDefault();
-            const target = lockedEl || lastChosen;
-            if (target) chooseElement(target);
-            else cleanup(); // never leave the HUD up if nothing to send
-        });
-        pickAgainBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            unlock();
-        });
-
-        try { document.documentElement.classList.add("fins-picker-on"); } catch { /* noop */ }
+        placeMarks();
+    }
+    function clearMarks() {
+        for (const m of marks) { m.badge.remove(); m.el.classList.remove("fins-picker-suggested"); }
+        marks.length = 0;
     }
 
-    function setStatus(text) { if (statusEl) statusEl.textContent = text || ""; }
-
-    function lockOn(el) {
-        locked = true;
-        lockedEl = smartChoose(el);
-        if (lastHover && lastHover !== lockedEl) lastHover.classList.remove("fins-picker-hover");
-        if (lockedEl && lockedEl.classList) {
-            lockedEl.classList.remove("fins-picker-hover");
-            lockedEl.classList.add("fins-picker-locked");
-        }
-        lastHover = lockedEl;
-        updatePreview(lockedEl, true);
-        if (pickAgainBtn) pickAgainBtn.hidden = false;
-        if (dotEl) dotEl.classList.add("green");
-        setStatus("Locked. Press \"Use this value\" or pick another.");
+    // ---- the guide (top frame) ----
+    function render() {
+        if (!hud) return;
+        const n = chosenEl ? firstNumber(textOf(chosenEl)) : null;
+        hud.innerHTML = `
+            <div class="head"><img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt="" width="18" height="18"><span>Finstracker</span><button type="button" class="x" data-act="cancel" aria-label="Cancel">×</button></div>
+            <div class="step">Step ${step} of 2</div>
+            ${step === 1 ? `
+                <div class="title">Click your ${esc(cardName)} balance</div>
+                ${suggestions.length ? `<div class="sub">Is it one of these?</div><div class="list">${suggestions.map((s, i) => `<button type="button" class="sugg" data-act="suggest" data-i="${i}"><b>${i + 1}</b><span class="num">${esc(s.text)}</span><span class="lbl">${esc(s.label)}</span></button>`).join("")}</div>` : `<div class="sub">Point at the number on the page and click it.</div>`}
+                ${message ? `<div class="msg">${esc(message)}</div>` : ""}
+                <div class="row">${payload.canNavigate ? '<button type="button" data-act="navigate">Not on this page</button>' : ""}<button type="button" data-act="cancel">Cancel</button></div>
+            ` : `
+                <div class="title">Use ${esc(n?.raw || "")} for ${esc(cardName)}?</div>
+                <div class="sub">It's outlined in green on the page.</div>
+                <div class="row"><button type="button" class="primary" data-act="use">Use ${esc(n?.raw || "")}</button><button type="button" data-act="again">Pick again</button></div>
+            `}`;
     }
 
-    function unlock() {
-        if (lockedEl && lockedEl.classList) lockedEl.classList.remove("fins-picker-locked");
-        locked = false;
-        lockedEl = null;
-        if (previewEl) previewEl.innerHTML = `<span class="empty">Hover over the points value…</span>`;
-        if (confirmBtn) confirmBtn.disabled = true;
-        if (pickAgainBtn) pickAgainBtn.hidden = true;
-        if (dotEl) dotEl.classList.remove("green");
-        setStatus("Tip: press Esc to cancel, Enter to confirm.");
-    }
-
-    function updatePreview(el, forceLocked) {
-        if (!previewEl) return;
-        if (locked && !forceLocked) return;
-        const chosen = smartChoose(el);
-        lastChosen = chosen;
-        const txt = pickText(chosen).replace(/\s+/g, " ").slice(0, 200);
-        const num = firstNumber(txt);
-        if (!txt) {
-            previewEl.innerHTML = `<span class="empty">No text in this element.</span>`;
-            if (confirmBtn) confirmBtn.disabled = true;
+    function choose(el) {
+        const target = numberElement(el);
+        if (!target) {
+            message = "That spot has no number. Click the balance itself.";
+            render();
             return;
         }
-        const safe = txt.replace(/[<&>]/g, (c) => ({ "<": "&lt;", "&": "&amp;", ">": "&gt;" }[c]));
-        if (num) {
-            const highlighted = safe.replace(num.raw, `<span class="num">${num.raw}</span>`);
-            previewEl.innerHTML = `<b>${locked ? "Locked" : "Detected"}:</b> ${highlighted}`;
-            if (confirmBtn) confirmBtn.disabled = false;
-        } else {
-            previewEl.innerHTML = `<b>No number found in:</b> ${safe}`;
-            if (confirmBtn) confirmBtn.disabled = true;
-        }
+        if (!isTop) { finish(target); return; } // other frames: no guide to confirm in
+        unoutline(chosenEl);
+        chosenEl = target;
+        unoutline(hoverEl);
+        outline(chosenEl, "chosen");
+        step = 2;
+        message = "";
+        hideTag();
+        render();
     }
 
-    function chooseElement(el) {
-        const chosen = smartChoose(el);
-        const selector = cssPath(chosen);
-        const text = pickText(chosen);
+    function finish(el) {
+        const selector = cssPath(el);
+        const text = textOf(el);
         let url = location.href;
-        try { if (window.top && window.top.location && window.top.location.href) url = window.top.location.href; }
-        catch { /* cross-origin iframe — fall back to our own URL */ }
-        // Tear down the picker UI FIRST so the user gets immediate feedback,
-        // then fire the message. We never want the picker to stay on screen
-        // waiting for a background round-trip that might fail silently.
+        try { url = window.top.location.href; } catch { /* cross-origin frame */ }
         cleanup();
-        try {
-            chrome.runtime.sendMessage(
-                { type: "pickerResult", selector, text, url },
-                () => { void chrome.runtime.lastError; /* swallow */ }
-            );
-        } catch { /* extension reloaded; nothing else to do */ }
+        send({ type: "pickerResult", selector, text, url });
     }
 
-    function isInHud(el) {
-        if (!host) return false;
-        if (el === host) return true;
-        if (el && el.closest && el.closest("#fins-picker-host")) return true;
-        return false;
+    function onHudAction(act, data) {
+        if (act === "cancel") { send({ type: "cancelCapture" }); cleanup(); }
+        else if (act === "suggest") choose(suggestions[Number(data.i)]?.el);
+        else if (act === "use" && chosenEl) finish(chosenEl);
+        else if (act === "again") { unoutline(chosenEl); chosenEl = null; step = 1; render(); }
+        else if (act === "navigate") { send({ type: "pickerNavigate" }); cleanup(); }
     }
+
+    // ---- hover tag that follows the pointer ----
+    function showTag(x, y, text, ok) {
+        if (!tag) return;
+        tag.textContent = text;
+        tag.className = ok ? "tag" : "tag no";
+        Object.assign(tag.style, { display: "block", left: `${Math.min(x + 14, innerWidth - 220)}px`, top: `${Math.min(y + 16, innerHeight - 40)}px` });
+    }
+    function hideTag() { if (tag) tag.style.display = "none"; }
+
+    const inGuide = (e) => host && e.composedPath && e.composedPath().includes(host);
+    const isOurs = (el) => el && el.closest && (el.closest("#fins-picker-host") || el.classList?.contains("fins-picker-badge") || el.closest("#fins-status-root"));
 
     function onMove(e) {
-        const el = e.composedPath ? e.composedPath()[0] : e.target;
-        if (!el || isInHud(el)) return;
-        if (locked) return;
-        if (lastHover && lastHover !== el) lastHover.classList.remove("fins-picker-hover");
-        lastHover = el;
-        if (el && el.classList) el.classList.add("fins-picker-hover");
-        if (isTop) updatePreview(el);
+        if (step !== 1 || inGuide(e)) { hideTag(); return; }
+        const el = e.target;
+        if (!(el instanceof Element) || isOurs(el)) return;
+        const target = numberElement(el);
+        if (hoverEl !== (target || el)) { unoutline(hoverEl); hoverEl = target || el; if (hoverEl !== chosenEl) outline(hoverEl, "hover"); }
+        const n = target ? firstNumber(textOf(target)) : null;
+        showTag(e.clientX, e.clientY, n ? `${n.raw} · click to pick` : "No number here", Boolean(n));
     }
-
-    function suppress(e) {
-        if (isInHud(e.target)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    function onDown(e) {
+        if (inGuide(e)) return; // the guide's own buttons
+        const el = e.target;
+        if (!(el instanceof Element) || isOurs(el)) return;
+        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        // Act on the pointer press; cancelling it stops the mouse events that would follow, so
+        // mousedown only counts when no pointer event came first.
+        if (e.type === "pointerdown") lastPointerDown = Date.now();
+        else if (Date.now() - lastPointerDown < 600) return;
+        if (step === 1) choose(el);
     }
-
-    function onPick(e) {
-        // If the user is interacting with an HUD button, handle it here in
-        // the earliest possible capture phase — banking SPAs install
-        // window-capture click handlers that call stopImmediatePropagation,
-        // which would otherwise prevent our shadow-DOM button handlers from
-        // ever firing.
-        const path = (e.composedPath && e.composedPath()) || [];
-        for (const node of path) {
-            if (!(node instanceof Element)) continue;
-            const id = node.id;
-            if (id === "finsConfirm" || id === "finsCancel" || id === "finsPickAgain") {
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-                // Only act on the first event of a logical click — pointerdown
-                // fires before mousedown which fires before click. Use mousedown.
-                if (e.type !== "mousedown") return;
-                if (id === "finsConfirm") {
-                    console.log("[finstracker] confirm via capture");
-                    const target = lockedEl || lastChosen;
-                    if (target) chooseElement(target);
-                    else cleanup();
-                } else if (id === "finsCancel") {
-                    console.log("[finstracker] cancel via capture");
-                    cancelPicker();
-                } else if (id === "finsPickAgain") {
-                    unlock();
-                }
-                return;
-            }
-            if (id === "fins-picker-host") {
-                // Click landed on HUD but not on a button (e.g. preview area).
-                // Don't treat as a page pick; let the shadow DOM handle it.
-                return;
-            }
-        }
-        if (isInHud(e.target)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-        const el = path.find((n) => n instanceof Element && !isInHud(n)) || e.target;
-        // Frames other than the top have no HUD to confirm in: a click there is the pick.
-        if (!isTop) { if (e.type === "mousedown") chooseElement(smartChoose(el)); return; }
-        lockOn(el);
+    function swallow(e) {
+        if (inGuide(e) || isOurs(e.target)) return;
+        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
     }
-
     function onKey(e) {
-        if (e.key === "Escape") {
-            if (locked) unlock();
-            else cancelPicker();
-        } else if (e.key === "Enter") {
-            const el = lockedEl || lastChosen;
-            if (el) { e.preventDefault(); chooseElement(el); }
-        }
-    }
-
-    // User-initiated cancel: tell the background to drop the capture
-    // session so the side panel status clears.
-    // Successful picks go through chooseElement -> pickerResult instead and
-    // must NOT cancel, so cleanup() alone stays the no-signal teardown.
-    function cancelPicker() {
-        try {
-            chrome.runtime.sendMessage(
-                { type: "cancelCapture" },
-                () => { void chrome.runtime.lastError; /* swallow */ }
-            );
-        } catch { /* extension reloaded; nothing else to do */ }
-        cleanup();
+        if (e.key === "Escape") { e.preventDefault(); if (step === 2) onHudAction("again", {}); else onHudAction("cancel", {}); }
+        else if (e.key === "Enter" && step === 2 && chosenEl) { e.preventDefault(); finish(chosenEl); }
+        else if (step === 1 && /^[1-3]$/.test(e.key) && suggestions[Number(e.key) - 1]) { e.preventDefault(); choose(suggestions[Number(e.key) - 1].el); }
     }
 
     function cleanup() {
+        window.__finsPickerActive = false;
         window.__finsPickerCleanup = null;
-        try { window.__finsPickerActive = false; } catch { /* noop */ }
-        for (const t of [window, document]) {
-            try { t.removeEventListener("mousemove", onMove, true); } catch { /* noop */ }
-            try { t.removeEventListener("mousedown", onPick, true); } catch { /* noop */ }
-            try { t.removeEventListener("pointerdown", onPick, true); } catch { /* noop */ }
-            try { t.removeEventListener("click", suppress, true); } catch { /* noop */ }
-            try { t.removeEventListener("mouseup", suppress, true); } catch { /* noop */ }
-            try { t.removeEventListener("keydown", onKey, true); } catch { /* noop */ }
-        }
-        try { if (lastHover) lastHover.classList.remove("fins-picker-hover"); } catch { /* noop */ }
-        try { if (lockedEl) lockedEl.classList.remove("fins-picker-locked"); } catch { /* noop */ }
-        // Belt-and-suspenders: nuke ALL picker decorations and any stale
-        // host that an earlier (errored) invocation may have left behind.
-        try {
-            document.querySelectorAll(".fins-picker-hover").forEach((n) => n.classList.remove("fins-picker-hover"));
-            document.querySelectorAll(".fins-picker-locked").forEach((n) => n.classList.remove("fins-picker-locked"));
-            document.querySelectorAll("#fins-picker-host").forEach((n) => n.remove());
-        } catch { /* noop */ }
-        try { document.documentElement.classList.remove("fins-picker-on"); } catch { /* noop */ }
-        host = null; shadow = null; previewEl = null;
-        confirmBtn = null; cancelBtn = null; pickAgainBtn = null;
-        statusEl = null; dotEl = null;
-        lastHover = null; lockedEl = null; lastChosen = null;
-        locked = false;
+        for (const [type, fn] of [["mousemove", onMove], ["mousedown", onDown], ["pointerdown", onDown], ["click", swallow], ["mouseup", swallow], ["keydown", onKey]]) window.removeEventListener(type, fn, true);
+        window.removeEventListener("scroll", placeMarks, true);
+        observer?.disconnect();
+        observer = null;
+        unoutline(hoverEl); unoutline(chosenEl); clearMarks();
+        document.querySelectorAll(".fins-picker-hover, .fins-picker-locked, .fins-picker-suggested").forEach((n) => n.classList.remove("fins-picker-hover", "fins-picker-locked", "fins-picker-suggested"));
+        document.querySelectorAll("#fins-picker-host, .fins-picker-badge").forEach((n) => n.remove());
+        document.documentElement.classList.remove("fins-picker-on");
+        host = shadow = hud = tag = hoverEl = chosenEl = null;
     }
 
-    // Capture-phase on WINDOW so we run before any document-level handler
-    // banking SPAs install — window capture is the very first phase.
-    window.__finsPickerCleanup = cleanup; // lets the extension close the picker in every frame
+    // ---- start ----
+    document.documentElement.classList.add("fins-picker-on");
+    if (isTop) {
+        host = document.createElement("div");
+        host.id = "fins-picker-host";
+        Object.assign(host.style, { position: "fixed", inset: "0", zIndex: "2147483647", pointerEvents: "none" });
+        document.documentElement.appendChild(host);
+        shadow = host.attachShadow({ mode: "closed" });
+        shadow.innerHTML = `<style>
+            :host, * { box-sizing: border-box; }
+            .hud { position: fixed; left: 16px; bottom: 16px; width: 340px; max-width: calc(100vw - 32px); padding: 14px 16px; border-radius: 12px; background: #fff; color: #1a1f17; font: 400 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; box-shadow: 0 12px 32px rgba(26,31,23,.16), 0 2px 6px rgba(26,31,23,.08); pointer-events: auto; }
+            .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; font-weight: 500; }
+            .head span { flex: 1; }
+            .head img { border-radius: 4px; }
+            .x { all: unset; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: #4f5648; font-size: 18px; cursor: pointer; }
+            .x:hover { background: #f3f4f0; }
+            .step { font-size: 10px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; color: #4f5648; }
+            .title { margin: 2px 0 4px; font-size: 16px; font-weight: 600; }
+            .sub { color: #4f5648; font-size: 12px; margin-bottom: 8px; }
+            .list { display: grid; gap: 6px; margin-bottom: 8px; }
+            .sugg { all: unset; display: grid; grid-template-columns: 22px auto 1fr; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #e5e8e1; border-radius: 8px; cursor: pointer; }
+            .sugg:hover, .sugg:focus-visible { border-color: #1d6b4a; background: #e9f6ef; }
+            .sugg b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #1d6b4a; color: #fff; font-size: 11px; }
+            .sugg .num { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+            .sugg .lbl { overflow: hidden; color: #4f5648; font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+            .msg { margin: 0 0 8px; color: #a32424; font-size: 12px; }
+            .row { display: flex; gap: 6px; flex-wrap: wrap; }
+            .row button { all: unset; display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid #e5e8e1; border-radius: 8px; background: #fff; color: #1a1f17; font-size: 13px; font-weight: 500; cursor: pointer; }
+            .row button:hover { border-color: #c4bba6; }
+            .row button.primary { background: #1d6b4a; border-color: #1d6b4a; color: #fff; }
+            .row button.primary:hover { background: #144f37; }
+            button:focus-visible { outline: 2px solid #087487; outline-offset: 2px; }
+            .tag { position: fixed; display: none; padding: 4px 8px; border-radius: 999px; background: #1d6b4a; color: #fff; font: 500 12px/1.4 system-ui, sans-serif; pointer-events: none; white-space: nowrap; }
+            .tag.no { background: #4f5648; }
+            @media (prefers-color-scheme: dark) {
+                .hud { background: #222a26; color: #eef4ee; }
+                .sub, .step, .sugg .lbl, .x { color: #aebcb2; }
+                .sugg, .row button { border-color: #3c4940; background: #2c3530; color: #eef4ee; }
+                .sugg:hover { background: #213a2e; }
+                .msg { color: #f08a8a; }
+            }
+        </style><div class="hud" role="dialog" aria-label="Pick your balance"></div><div class="tag"></div>`;
+        hud = shadow.querySelector(".hud");
+        tag = shadow.querySelector(".tag");
+        hud.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-act]");
+            if (btn) { e.preventDefault(); onHudAction(btn.dataset.act, btn.dataset); }
+        });
+        refreshSuggestions();
+        hud.querySelector(".sugg")?.focus({ preventScroll: true });
+        // Bank pages fill in after they load: refresh the suggestions as content arrives.
+        let timer = 0;
+        observer = new MutationObserver((records) => {
+            if (step !== 1 || records.every((r) => isOurs(r.target instanceof Element ? r.target : r.target.parentElement))) return;
+            clearTimeout(timer);
+            timer = setTimeout(refreshSuggestions, 500);
+        });
+        observer.observe(document.body || document.documentElement, { childList: true, subtree: true, characterData: true });
+    }
+    window.__finsPickerCleanup = cleanup;
     window.addEventListener("mousemove", onMove, true);
-    window.addEventListener("mousedown", onPick, true);
-    window.addEventListener("pointerdown", onPick, true);
-    window.addEventListener("click", suppress, true);
-    window.addEventListener("mouseup", suppress, true);
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("mousedown", onDown, true);
+    window.addEventListener("click", swallow, true);
+    window.addEventListener("mouseup", swallow, true);
     window.addEventListener("keydown", onKey, true);
+    window.addEventListener("scroll", placeMarks, true);
 })();

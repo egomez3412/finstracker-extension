@@ -90,14 +90,38 @@ try {
       const box = await bank.evaluate(() => { const h = document.getElementById("fins-picker-host"); return h ? true : false; });
       log("picker HUD present:", box);
       // Click "Use this value" with the mouse (the HUD sits bottom-left in a closed shadow root).
-      // "Use this value" sits bottom-left in the picker's closed shadow root (1100×760 window).
-      await bank.mouse.click(90, 693);
+      await bank.keyboard.press("Enter"); // step 2: use the outlined number
       await waitFor(() => state.transactions.length > 0, "picked transaction");
       log("transactions:", JSON.stringify(state.transactions), "picker gone:", await bank.evaluate(() => !document.getElementById("fins-picker-host")));
       const { portalOverrides } = await sw.evaluate(() => chrome.storage.local.get("portalOverrides"));
       log("saved spot:", JSON.stringify(portalOverrides.c1));
       ok = state.points === 98765 && portalOverrides.c1?.source === "user-picker";
     }
+  } else if (scenario === "guided") {
+    // Pick the balance while looking at a page that is not the bank: the extension goes there,
+    // waits for sign-in, then opens the guided picker by itself.
+    await panel.click('[data-act="pick"][data-id="c1"]');
+    bank = await ctx.waitForEvent("page", { timeout: 5000 });
+    await bank.waitForLoadState();
+    await waitFor((s) => s?.status === "awaiting-login", "sign-in");
+    await sleep(400); log("note:", await note(bank));
+    await signIn(bank);
+    await waitFor((s) => s?.status === "picking" && /dashboard/.test(s.currentUrl || ""), "picker on dashboard");
+    await sleep(500);
+    await bank.screenshot({ path: `${SHOTS}/guided-dashboard.png` });
+    await bank.mouse.click(95, 713); // "Not on this page" in the picker
+    await waitFor((s) => s?.status === "picking" && /rewards/.test(s.currentUrl || ""), "picker on rewards page");
+    await sleep(600);
+    await bank.mouse.move(40, 145); await sleep(200); // hover shows the number that would be picked
+    await bank.screenshot({ path: `${SHOTS}/guided-rewards.png` });
+    await bank.keyboard.press("1"); // first suggestion
+    await sleep(300);
+    await bank.screenshot({ path: `${SHOTS}/guided-step2.png` });
+    await bank.mouse.click(80, 713); // "Use 98,765" in the picker (bottom-left, 1100×760 window)
+    await waitFor(() => state.transactions.length > 0, "picked transaction");
+    const { portalOverrides } = await sw.evaluate(() => chrome.storage.local.get("portalOverrides"));
+    log("transactions:", JSON.stringify(state.transactions), "spot:", portalOverrides.c1?.selector, portalOverrides.c1?.source);
+    ok = state.points === 98765 && portalOverrides.c1?.source === "user-picker";
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

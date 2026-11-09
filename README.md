@@ -48,6 +48,8 @@ Close the sync prompt on a card's site and a small Finstracker tab stays on the 
 
 ## Autopilot
 
+**Which card is on screen.** Finstracker reads the card name the site shows in its top bar or card switcher ("The Platinum Card® •••• 1004"), using only the words that tell your cards apart ("Amex Gold" and "Amex Platinum" → "gold", "platinum"). The popup says "You're viewing Platinum Card" and picks it by default; Sync this page and Read this tab sync the card on screen and say so if you chose another; autopilot starts with it. Before saving a balance, offers or benefits, it checks the page still shows the right card: autopilot selects the card again, and otherwise saves nothing for it (a balance printed right next to the card's own name, on pages that list several cards, still counts).
+
 On a card site, the Finstracker popup names your cards that use the site ("3 of your cards use americanexpress.com: Gold, Platinum, Blue Cash") and offers **Run autopilot for 3 cards**. It runs in that tab. When several cards share a site, autopilot selects each card in the site's own card switcher before reading its balance, offers and benefits. If a card can't be selected on the offers or benefits page, that step is skipped for the card rather than saving another card's data. A short summary, one line per card, shows on the page at the end. The quick tab has the same **Run autopilot for all**.
 
 **Run autopilot** (on a card, or for all cards at the top of Your cards) goes through the issuer's pages in one tab and updates everything for each card:
@@ -121,6 +123,7 @@ npm run e2e -- activity  # baseline first, then new activity lines recorded
 npm run e2e -- autopilot # balance, offers and benefits from one button
 npm run e2e -- quicktab  # close the prompt, drag the tab, sync from its menu
 npm run e2e -- portal    # three cards on one site with a card switcher, autopilot from the popup
+npm run e2e -- viewing   # the page shows Platinum: popup, Sync this page, Read this tab and autopilot follow it
 ```
 
 ## Security model

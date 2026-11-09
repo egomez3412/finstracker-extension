@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { balanceHints, normalizeIssuer, programFor } from "../lib/programs.js";
+import { balanceHints, distinctWords, nameWords, normalizeIssuer, programFor } from "../lib/programs.js";
 import { cardsForUrl, nextHop, pageToRemember, resolvePortal, urlMatches } from "../lib/portals.js";
 
 const portals = JSON.parse(readFileSync(new URL("../portals.json", import.meta.url)));
@@ -87,4 +87,15 @@ test("cash back cards look for dollar balances, not points currencies", () => {
     assert.ok(h.keywords.includes("reward dollars") && h.keywords.includes("cashback bonus"));
     assert.ok(!h.keywords.includes("membership rewards"));
     assert.deepEqual(h.cardWords, ["blue", "everyday"]);
+});
+
+test("card names without bank words, and the words that tell cards apart", () => {
+    assert.deepEqual(nameWords({ displayName: "Amex Gold", issuer: "American Express" }), ["gold"]);
+    assert.deepEqual(nameWords({ displayName: "The Platinum Card®", issuer: "American Express" }), ["platinum"]);
+    assert.deepEqual(nameWords({ displayName: "Chase Sapphire Preferred", issuer: "Chase" }), ["sapphire", "preferred"]);
+    const bcp = { displayName: "Blue Cash Preferred", issuer: "Amex" }, bce = { displayName: "Blue Cash Everyday", issuer: "Amex" };
+    assert.deepEqual(distinctWords(bcp, [bce]), ["preferred"]);
+    assert.deepEqual(distinctWords(bce, [bcp]), ["everyday"]);
+    assert.deepEqual(distinctWords({ displayName: "Amex Gold", issuer: "Amex" }, [{ displayName: "Amex Platinum", issuer: "Amex" }]), ["gold"]);
+    assert.deepEqual(balanceHints({ displayName: "Amex Gold", issuer: "American Express" }).cardWords, ["gold"]);
 });

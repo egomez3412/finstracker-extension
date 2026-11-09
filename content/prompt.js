@@ -82,7 +82,7 @@
         }
     });
     root.querySelector(".fins-prompt-close").addEventListener("click", () => {
-        chrome.runtime.sendMessage({ type: "dismissPromptForOrigin", origin: location.origin }).catch(() => {});
+        chrome.runtime.sendMessage({ type: "collapsePrompt" }).catch(() => {}); // leaves the quick tab on the edge
         close();
     });
 

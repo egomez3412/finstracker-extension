@@ -42,6 +42,10 @@ git clone https://github.com/egomez3412/finstracker-extension.git
 
 To update: `git pull`, then click **Reload** on the extension in `chrome://extensions`. Settings and saved balance spots are kept.
 
+## Quick tab
+
+Close the sync prompt on a card's site and a small Finstracker tab stays on the edge of the page (and on the site's other pages). Drag it anywhere along the left or right edge; it remembers the spot. Click it for **Sync points/cash back**, **Pick the balance**, **Sync offers**, **Sync benefits**, **Run autopilot**, **Open Finstracker** (the side panel) or **Hide on this site**. Settings has a switch for it and brings it back on hidden sites.
+
 ## Autopilot
 
 **Run autopilot** (on a card, or for all cards at the top of Your cards) goes through the issuer's pages in one tab and updates everything for each card:
@@ -113,6 +117,7 @@ npm run e2e -- offers    # Add to Card on each offer, not the page's own buttons
 npm run e2e -- benefits  # follows the Benefits link, marks fully used credits
 npm run e2e -- activity  # baseline first, then new activity lines recorded
 npm run e2e -- autopilot # balance, offers and benefits from one button
+npm run e2e -- quicktab  # close the prompt, drag the tab, sync from its menu
 ```
 
 ## Security model

@@ -11,7 +11,8 @@ const state = {
     tab: "cards", // cards | credits | offers
     user: null,
     apiBase: PRODUCTION,
-    settings: { autoDetect: true, checkoutHints: false, theme: "system", addOffersToCard: true, recordActivity: true, autopilotAuto: false },
+    settings: { autoDetect: true, checkoutHints: false, theme: "system", addOffersToCard: true, recordActivity: true, autopilotAuto: false, launcherOn: true },
+    launcherHidden: {}, // sites where the quick tab was hidden
     autopilot: {}, // cardId → { on, lastRun, results }
     autopilotRun: null, // { running, total, index, cardName, step }
     overrides: {},
@@ -314,6 +315,8 @@ function settingsView() {
         <h1 class="page-title">Settings</h1>
         ${panel("Sync", "", `<div class="panel-body"><ul class="rows">
             ${line("Offer to sync on card portals", toggle("toggle-autodetect", s.autoDetect, "Offer to sync on card portals"))}
+            ${line("Quick tab on card sites", toggle("toggle-setting", s.launcherOn, "Quick tab on card sites", "launcherOn"))}
+            ${Object.keys(state.launcherHidden).length ? `<li class="row"><div class="row-main"><div class="row-title">Quick tab hidden on ${Object.keys(state.launcherHidden).length} ${Object.keys(state.launcherHidden).length === 1 ? "site" : "sites"}</div><div class="row-sub">${esc(Object.keys(state.launcherHidden).map(hostOf).join(", "))}</div></div><button type="button" class="btn-ghost btn-small" data-act="unhide-launcher">Show again</button></li>` : ""}
             ${line("Best card at checkout", toggle("toggle-checkout", s.checkoutHints, "Best card at checkout"))}
             ${line("Add offers to my cards", toggle("toggle-setting", s.addOffersToCard, "Add offers to my cards", "addOffersToCard"))}
             ${line("Record points activity", toggle("toggle-setting", s.recordActivity, "Record points activity", "recordActivity"))}
@@ -456,6 +459,7 @@ const actions = {
         await send({ type: "setAutopilot", cardId: el.dataset.id, on });
         if (on && !state.settings.autopilotAuto) toast("Turn on Daily autopilot in Settings to run it by itself");
     },
+    async "unhide-launcher"() { await setState({ launcherHidden: {} }); toast("The quick tab will show on those sites again"); },
     async "toggle-setting"(el) {
         const key = el.dataset.value;
         await setState({ [key]: !state.settings[key] });
@@ -597,7 +601,8 @@ onChanged((changes) => {
     if (changes.theme) { state.settings.theme = changes.theme.newValue || "system"; applyTheme(state.settings.theme); }
     if (changes.autoDetect) state.settings.autoDetect = changes.autoDetect.newValue !== false;
     if (changes.checkoutHints) state.settings.checkoutHints = Boolean(changes.checkoutHints.newValue);
-    for (const key of ["addOffersToCard", "recordActivity"]) if (changes[key]) state.settings[key] = changes[key].newValue !== false;
+    for (const key of ["addOffersToCard", "recordActivity", "launcherOn"]) if (changes[key]) state.settings[key] = changes[key].newValue !== false;
+    if (changes.launcherHidden) state.launcherHidden = changes.launcherHidden.newValue || {};
     if (changes.autopilotAuto) state.settings.autopilotAuto = Boolean(changes.autopilotAuto.newValue);
     if (changes.autopilot) state.autopilot = changes.autopilot.newValue || {};
     if (changes.autopilotRun) {
@@ -618,7 +623,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
 /* ---------- start ---------- */
 
 (async () => {
-    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "autoDetect", "checkoutHints", "theme", "cardsCache", "addOffersToCard", "recordActivity", "autopilotAuto", "autopilot", "autopilotRun"]);
+    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "autoDetect", "checkoutHints", "theme", "cardsCache", "addOffersToCard", "recordActivity", "autopilotAuto", "autopilot", "autopilotRun", "launcherOn", "launcherHidden"]);
     applyTheme(s.theme);
     Object.assign(state, {
         user: s.user,
@@ -626,7 +631,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
         session: s.captureSession,
         overrides: s.portalOverrides || {},
         pages: s.rewardsPages || {},
-        settings: { autoDetect: s.autoDetect !== false, checkoutHints: Boolean(s.checkoutHints), theme: s.theme || "system", addOffersToCard: s.addOffersToCard !== false, recordActivity: s.recordActivity !== false, autopilotAuto: Boolean(s.autopilotAuto) },
+        settings: { autoDetect: s.autoDetect !== false, checkoutHints: Boolean(s.checkoutHints), theme: s.theme || "system", addOffersToCard: s.addOffersToCard !== false, recordActivity: s.recordActivity !== false, autopilotAuto: Boolean(s.autopilotAuto), launcherOn: s.launcherOn !== false },
+        launcherHidden: s.launcherHidden || {},
         autopilot: s.autopilot || {},
         autopilotRun: s.autopilotRun || null,
         cards: Array.isArray(s.cardsCache) ? s.cardsCache : null, // paint right away, refresh below

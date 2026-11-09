@@ -689,15 +689,32 @@
         try { best.el.click(); return { clicked: true }; } catch { return null; }
     }
 
+    // Open collapsed benefit details ("View details", "Track progress", accordions) so usage is on
+    // the page. Only buttons that expand something in place; never links that leave the page.
+    async function expandDetails() {
+        const WANT = /(view|see|show|track)\s+(details|progress|more|all|usage|benefits)|details|progress|expand|more info/i;
+        let opened = 0;
+        for (const el of document.querySelectorAll("button[aria-expanded='false'], [role='button'][aria-expanded='false'], summary, details:not([open]) > summary")) {
+            if (opened >= 40) break;
+            const r = el.getBoundingClientRect();
+            if (r.width < 2 || r.height < 2) continue;
+            const t = `${el.innerText || ""} ${el.getAttribute("aria-label") || ""}`.trim();
+            if (el.tagName !== "SUMMARY" && !WANT.test(t) && t.length > 60) continue;
+            try { el.click(); opened += 1; } catch { /* keep going */ }
+            await new Promise((res) => setTimeout(res, 120));
+        }
+        return opened;
+    }
+
     // Card benefits with their usage: [{ title, used, total, remaining, fullyUsed }].
     // Reads tiles such as "Uber Cash · $10 of $10 used", "Digital Entertainment · $0 remaining",
     // "Saks credit · Completed", and progress bars (aria-valuenow / aria-valuemax).
     function readBenefits() {
         const money = (s) => Number(String(s).replace(/[$,\s]/g, ""));
         const OF = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:of|\/|out of)\s*\$\s?([\d,]+(?:\.\d{2})?)/i;
-        const USED = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:used|earned|redeemed|spent|received)/i;
+        const USED = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:used|earned|redeemed|spent|received|credited|applied)|(?:used|earned|redeemed|spent|received|credited)\s*:?\s*\$\s?([\d,]+(?:\.\d{2})?)/i;
         const LEFT = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:remaining|left|available|to go)/i;
-        const DONE = /\b(fully used|completed|complete|all used|maxed out|no (credit|balance) (remaining|left)|you('ve| have) (used|earned) (it|this|the full))\b/i;
+        const DONE = /\b(fully used|fully earned|earned in full|used in full|completed|complete|all used|maxed out|maximum (reached|earned)|credit (received|applied|issued)|you('ve| have) (used|earned|received) (it|this|the full|your)|no (credit|balance) (remaining|left))\b/i;
         const found = [];
         for (const el of document.querySelectorAll("li, article, section, div, [role='listitem']")) {
             const text = (el.innerText || "").replace(/[  ]/g, " ").trim();
@@ -707,7 +724,7 @@
             let used = null, total = null, remaining = null;
             const of = text.match(OF);
             if (of) { used = money(of[1]); total = money(of[2]); }
-            const u = text.match(USED); if (u && used == null) used = money(u[1]);
+            const u = text.match(USED); if (u && used == null) used = money(u[1] || u[2]);
             const l = text.match(LEFT); if (l) remaining = money(l[1]);
             const bar = el.querySelector("[role='progressbar'][aria-valuenow]");
             if (bar && used == null) {
@@ -716,7 +733,11 @@
             }
             const done = DONE.test(text);
             if (used == null && remaining == null && !done) continue;
-            const title = text.split(/\n+/).map((t) => t.trim()).find((t) => /[a-z]{3}/i.test(t) && t.length <= 80 && !/\$\s?\d/.test(t) && !/^(used|remaining|earned|completed?|details|view|see|learn more)\b/i.test(t));
+            // A list of benefits (or the page around them), not one benefit.
+            if (el.querySelector("nav, header, h1, [role='navigation']") || el.querySelectorAll("h2, h3, h4, [role='heading']").length > 1 || el.querySelectorAll("[aria-expanded]").length > 1) continue;
+            // The benefit's name: a line that isn't a status ("Credit received", "$5 used", "View details").
+            const isStatus = (t) => DONE.test(t) || OF.test(t) || USED.test(t) || LEFT.test(t) || /^(view|see|show|hide|track)\b|^(used|remaining|earned|completed?|details|learn more|enrolled?)\b/i.test(t);
+            const title = text.split(/\n+/).map((t) => t.trim()).find((t) => /[a-z]{3}/i.test(t) && t.length <= 80 && !/\$\s?\d/.test(t) && !isStatus(t));
             if (!title) continue;
             const fullyUsed = done || (total > 0 && used >= total) || (remaining === 0 && (used > 0 || total > 0 || /\$\s?0(\.00)?\s*(remaining|left)/i.test(text)));
             found.push({ el, title, used, total, remaining, fullyUsed });
@@ -726,7 +747,7 @@
             .filter((f) => !found.some((g) => g !== f && f.el.contains(g.el) && g.title === f.title))
             .filter((f, i, all) => all.findIndex((g) => g.title === f.title) === i)
             .slice(0, 60)
-            .map(({ title, used, total, remaining, fullyUsed }) => ({ title, used, total, remaining, fullyUsed }));
+            .map(({ title, used, total, remaining, fullyUsed }) => ({ title: title.replace(/[®™]/g, "").trim(), used, total, remaining, fullyUsed }));
     }
 
     // Rewards activity lines: [{ date, description, amount }], amount negative for redemptions.
@@ -870,5 +891,5 @@
         return false;
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, readActivity, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard };
+    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard };
 })();

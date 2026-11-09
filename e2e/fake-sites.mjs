@@ -20,6 +20,7 @@ export function startServer({ port = 3000 } = {}) {
             { id: "p-uber", cardId: "c1", title: "Uber Cash · Nov", valueCents: 1000, deadline: endOfMonth(), used: false },
             { id: "p-de", cardId: "c1", title: "Digital Entertainment Credit · Nov", valueCents: 2000, deadline: endOfMonth(), used: false },
             { id: "p-dining", cardId: "c3", title: "Dining Credit · Nov", valueCents: 1000, deadline: endOfMonth(), used: false },
+            { id: "p-saks", cardId: "c1", title: "Saks Fifth Avenue Credit · H2", valueCents: 5000, deadline: endOfMonth(), used: false },
         ],
         offers: [],
         get points() { return this.cards.c1.currentPoints; },
@@ -55,7 +56,7 @@ export function startServer({ port = 3000 } = {}) {
                 state.transactions.push(t);
                 return json(res, { transaction: t }, 201);
             }
-            if (group === "perks" && !id) return json(res, state.perks.filter((x) => !x.used));
+            if (group === "perks" && !id) return json(res, url.searchParams.get("status") === "available" ? state.perks.filter((x) => !x.used) : state.perks);
             if (group === "perks" && id && req.method === "PUT") {
                 const perk = state.perks.find((x) => x.id === id);
                 Object.assign(perk, { used: Boolean((await readBody(req)).used) });
@@ -133,6 +134,45 @@ export function startServer({ port = 3000 } = {}) {
                         b.addEventListener("click", () => { b.textContent = "Added"; });
                         t.append(b); root.append(t);
                     }
+                } else if (location.pathname === "/bank/amex-offers") {
+                    // Amex-style offers: many formats, the list redraws after every click, more behind
+                    // "Load more", and one offer whose first click doesn't take.
+                    const decoy = el("button", "Add card"); decoy.addEventListener("click", () => { document.body.dataset.decoy = "clicked"; });
+                    root.append(decoy);
+                    const all = [["Best Buy", "Spend $100, get $15 back"], ["Uber Eats", "Earn 1,000 Membership Rewards® points"], ["Hilton", "Earn +3X points"], ["Dell", "$10 statement credit"], ["Audible", "Get $20 back"],
+                        ["Saks", "10% back"], ["Hotels.com", "Earn 2,500 Membership Rewards points"], ["Lyft", "Spend $25, get $5 back"]];
+                    const state = window.__offers || (window.__offers = { shown: 5, added: new Set(), flaky: true });
+                    const list = el("div"); list.id = "offer-list";
+                    const drawList = () => {
+                        list.replaceChildren();
+                        for (const [merchant, badge] of all.slice(0, state.shown)) {
+                            const t = tile([[merchant], [badge], ["Expires Dec 31, 2026"]]);
+                            const b = el("button", state.added.has(merchant) ? "Added to Card" : "Add to Card");
+                            b.addEventListener("click", () => {
+                                if (merchant === "Uber Eats" && state.flaky) { state.flaky = false; return; } // first click lost
+                                setTimeout(() => { state.added.add(merchant); drawList(); }, 300); // the whole list redraws
+                            });
+                            t.append(b); list.append(t);
+                        }
+                    };
+                    drawList();
+                    root.append(list);
+                    if (state.shown < all.length) {
+                        const more = el("button", "Load more");
+                        more.addEventListener("click", () => { state.shown = all.length; more.remove(); drawList(); });
+                        root.append(more);
+                    }
+                    window.__addedCount = () => state.added.size;
+                } else if (location.pathname === "/bank/amex-benefits") {
+                    // Amex-style benefits: usage hidden in collapsed "View details" sections.
+                    for (const [name, detail] of [["Uber Cash", "Earned $15.00 of $15.00"], ["Digital Entertainment Credit", "$5.00 used · $15.00 remaining"], ["Saks Fifth Avenue Credit", "Credit received"], ["Walmart+ Credit", "$0.00 remaining"]]) {
+                        const t = el("section"); t.className = "benefit";
+                        const head = el("h3", name);
+                        const btn = el("button", "View details"); btn.setAttribute("aria-expanded", "false");
+                        const panel = el("div", detail); panel.hidden = true;
+                        btn.addEventListener("click", () => { panel.hidden = !panel.hidden; btn.setAttribute("aria-expanded", String(!panel.hidden)); });
+                        t.append(head, btn, panel); root.append(t);
+                    }
                 } else if (location.pathname === "/bank/benefits") {
                     if (acct === "c3") root.append(tile([["Dining Credit"], ["$10 of $10 used"]]));
                     else root.append(tile([["Uber Cash"], ["$10 of $10 used"]]), tile([["Digital Entertainment Credit"], ["$5 of $20 used"]]));
@@ -141,7 +181,7 @@ export function startServer({ port = 3000 } = {}) {
             setTimeout(draw, 1200);`, h);
         if (p === "/bank/login" && req.method === "POST") { res.writeHead(302, { location: "/bank/dashboard", "set-cookie": "bank=1; Path=/" }); return res.end(); }
         const signedIn = /(^|;\s*)bank=1/.test(req.headers.cookie || "");
-        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits"];
+        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits"];
         if (pages.includes(p) && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }
         if (p === "/bank/login") return send(res, 200, "text/html", page("Sign in", `<form method="post" action="/bank/login"><input name="user" autocomplete="username"><input type="password" name="pw"><button>Sign in</button></form>`), h);
         if (p === "/bank/rewards") h["content-security-policy"] = `${csp}; require-trusted-types-for 'script'`;

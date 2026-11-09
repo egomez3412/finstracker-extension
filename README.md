@@ -52,6 +52,8 @@ Close the sync prompt on a card's site and a small Finstracker tab stays on the 
 
 On a card site, the Finstracker popup names your cards that use the site ("3 of your cards use americanexpress.com: Gold, Platinum, Blue Cash") and offers **Run autopilot for 3 cards**. It runs in that tab. When several cards share a site, autopilot selects each card in the site's own card switcher before reading its balance, offers and benefits. If a card can't be selected on the offers or benefits page, that step is skipped for the card rather than saving another card's data. A short summary, one line per card, shows on the page at the end. The quick tab has the same **Run autopilot for all**.
 
+**Windows and the progress board.** Run by hand, autopilot reads each card's balance in your tab, then opens two small windows beside it that add and save the card's offers and check its benefits at the same time; they close when done. Cards run one after another, since a site shows one selected card at a time. A board in the top-right of the portal page shows every card with its Balance, Offers and Benefits as they happen (minimize it, or Stop autopilot); it stays with the results when autopilot is done. The daily run works in one background tab instead, without windows.
+
 **Run autopilot** (on a card, or for all cards at the top of Your cards) goes through the issuer's pages in one tab and updates everything for each card:
 
 1. **Balance**: points, or cash back for cash back cards (Amex "Reward Dollars", Discover "Cashback Bonus", "cash back"), plus new **points activity** lines ("Nov 8 · Dining · +500 pts") recorded as their own entries. The first read of a card only notes what is already there, so nothing is counted twice.
@@ -124,6 +126,8 @@ npm run e2e -- autopilot # balance, offers and benefits from one button
 npm run e2e -- quicktab  # close the prompt, drag the tab, sync from its menu
 npm run e2e -- portal    # three cards on one site with a card switcher, autopilot from the popup
 npm run e2e -- viewing   # the page shows Platinum: popup, Sync this page, Read this tab and autopilot follow it
+npm run e2e -- addall    # Amex-style offers: new formats, redrawn list, Load more, a lost click; all 8 added
+npm run e2e -- amexbenefits # benefits behind "View details"; each benefit reported with what happened
 ```
 
 ## Security model

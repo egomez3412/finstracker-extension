@@ -13,6 +13,7 @@ const state = {
     apiBase: PRODUCTION,
     settings: { autoDetect: true, checkoutHints: false, theme: "system" },
     overrides: {},
+    pages: {}, // cardId → { url, source } where the balance was found or the user set it
     session: null,
     cards: null,
     credits: null,
@@ -215,6 +216,7 @@ function cardRow(card) {
             <dl class="summary-list">
                 <div><dt>Worth about</dt><dd>${esc(money(Math.round(balanceValue(card))))}</dd></div>
                 ${card.annualFee > 0 ? `<div><dt>Annual fee</dt><dd>${esc(money(card.annualFee))}${fee ? ` · ${esc(shortDate(fee))}` : ""}</dd></div>` : ""}
+                <div><dt>Rewards page</dt><dd>${state.pages[card.id] ? esc(hostOf(state.pages[card.id].url)) : "Not saved yet"}</dd></div>
                 ${override ? `<div><dt>Balance spot</dt><dd>${override.source === "user-picker" ? "Your pick" : "Learned"}</dd></div>` : ""}
             </dl>
             <div class="action-row">
@@ -222,6 +224,7 @@ function cardRow(card) {
                 <button type="button" class="btn-ghost btn-small" data-act="sync-offers" data-id="${esc(card.id)}">Sync offers</button>
                 <button type="button" class="btn-ghost btn-small" data-act="read-tab" data-id="${esc(card.id)}">Read this tab</button>
                 <button type="button" class="btn-ghost btn-small" data-act="pick" data-id="${esc(card.id)}">Pick the balance</button>
+                <button type="button" class="btn-ghost btn-small" data-act="use-tab" data-id="${esc(card.id)}">Use this tab</button>
             </div>
         </div></div></div>
     </li>`;
@@ -284,12 +287,13 @@ function settingsView() {
             ${line("Best card at checkout", toggle("toggle-checkout", s.checkoutHints, "Best card at checkout"))}
         </ul></div>`)}
         ${panel("Appearance", "", `<div class="panel-body"><ul class="rows">${line("Theme", `<div class="seg" role="tablist" aria-label="Theme">${theme("system", "System")}${theme("light", "Light")}${theme("dark", "Dark")}</div>`)}</ul></div>`)}
-        ${panel("Balance spots", "", `<div class="panel-body form-stack">
+        ${panel("Rewards pages", "", `<div class="panel-body form-stack">
             <select class="select" data-act="configure-card" aria-label="Card">
                 <option value="">Choose a card</option>
                 ${cards.map((c) => `<option value="${esc(c.id)}" ${c.id === state.configureCard ? "selected" : ""}>${esc(c.displayName)} · ${esc(c.issuer)}</option>`).join("")}
             </select>
-            ${picked ? `<div class="action-row"><button type="button" class="btn-primary btn-small" data-act="configure" data-id="${esc(picked.id)}">Open portal and pick</button>${state.overrides[picked.id] ? `<button type="button" class="btn-ghost btn-small" data-act="reset-spot" data-id="${esc(picked.id)}">Reset</button>` : ""}</div>` : ""}
+            ${picked ? `${state.pages[picked.id] ? `<dl class="summary-list"><div><dt>Saved page</dt><dd>${esc(hostOf(state.pages[picked.id].url))}</dd></div></dl>` : ""}
+            <div class="action-row"><button type="button" class="btn-primary btn-small" data-act="configure" data-id="${esc(picked.id)}">Open portal and pick</button><button type="button" class="btn-ghost btn-small" data-act="use-tab" data-id="${esc(picked.id)}">Use current tab</button>${state.overrides[picked.id] || state.pages[picked.id] ? `<button type="button" class="btn-ghost btn-small" data-act="reset-spot" data-id="${esc(picked.id)}">Reset</button>` : ""}</div>` : ""}
         </div>`)}
         ${panel("Account", "", `<div class="panel-body"><ul class="rows"><li class="row"><div class="row-main"><div class="row-title">${esc(state.user?.username || state.user?.email || "Signed in")}</div>${state.apiBase !== PRODUCTION ? `<div class="row-sub">${esc(state.apiBase)}</div>` : ""}</div><button type="button" class="btn-ghost btn-small btn-danger-text" data-act="signout">Sign out</button></li></ul></div>`)}
     </div>`;
@@ -333,6 +337,21 @@ const cardById = (id) => state.cards?.find((c) => c.id === id);
 
 async function openUrl(url) {
     try { await chrome.tabs.create({ url, active: true }); } catch { window.open(url, "_blank", "noopener"); }
+}
+
+/** "https://global.americanexpress.com/x" → "americanexpress.com" */
+const hostOf = (url) => { try { return new URL(url).hostname.split(".").slice(-2).join("."); } catch { return ""; } };
+
+/** Ask for access to the open site when it is not one of the built-in issuer and program sites. */
+async function ensureSiteAccess(url) {
+    let origins;
+    try { origins = [`${new URL(url).origin}/*`]; } catch { return false; }
+    try {
+        if (await chrome.permissions.contains({ origins })) return true;
+        return await chrome.permissions.request({ origins });
+    } catch {
+        return false;
+    }
 }
 
 async function activeTab() {
@@ -404,7 +423,8 @@ const actions = {
     async "read-tab"(el) {
         const card = cardById(el.dataset.id);
         const tab = await activeTab();
-        if (!tab?.id) return setRowState(card.id, "error", "No tab open");
+        if (!tab?.id || !/^https?:/.test(tab.url || "")) return setRowState(card.id, "error", "Open the card's rewards page first");
+        if (!(await ensureSiteAccess(tab.url))) return setRowState(card.id, "error", `Allow access to ${hostOf(tab.url)} to read it`);
         setRowState(card.id, "syncing", "Reading this tab…");
         const r = await send({ type: "syncFromActiveTab", card, tabId: tab.id });
         if (handleSignedOut(r)) return;
@@ -417,8 +437,17 @@ const actions = {
         const card = cardById(el.dataset.id);
         const tab = await activeTab();
         if (!tab?.id || !/^https?:/.test(tab.url || "")) return setRowState(card.id, "error", "Open the card's rewards page first");
+        if (!(await ensureSiteAccess(tab.url))) return setRowState(card.id, "error", `Allow access to ${hostOf(tab.url)} to pick on it`);
         const r = await send({ type: "startPickerForCard", card, tabId: tab.id });
         if (!r.ok) setRowState(card.id, "error", r.error || "Couldn't start the picker");
+    },
+    async "use-tab"(el) {
+        const card = cardById(el.dataset.id);
+        const tab = await activeTab();
+        if (!tab?.id || !/^https?:/.test(tab.url || "")) return toast("Open the card's rewards page in a tab first", { kind: "error" });
+        if (!(await ensureSiteAccess(tab.url))) return toast(`Allow access to ${hostOf(tab.url)} to use it`, { kind: "error" });
+        const r = await send({ type: "setRewardsPage", cardId: card.id, url: tab.url });
+        toast(r.ok ? `${card.displayName} will sync from ${hostOf(tab.url)}` : r.error || "Couldn't save the page", { kind: r.ok ? "" : "error" });
     },
     async "session-pick"() {
         const r = await send({ type: "openPicker" });
@@ -448,7 +477,7 @@ const actions = {
         state.view = "home";
         render();
     },
-    async "reset-spot"(el) { await send({ type: "clearOverride", cardId: el.dataset.id }); toast("Balance spot reset"); },
+    async "reset-spot"(el) { await send({ type: "clearOverride", cardId: el.dataset.id }); toast("Rewards page and balance spot reset"); },
     async signout() { await send({ type: "logout" }); toast("Signed out"); },
 };
 
@@ -498,6 +527,7 @@ onChanged((changes) => {
     if (changes.autoDetect) state.settings.autoDetect = changes.autoDetect.newValue !== false;
     if (changes.checkoutHints) state.settings.checkoutHints = Boolean(changes.checkoutHints.newValue);
     if (changes.portalOverrides) state.overrides = changes.portalOverrides.newValue || {};
+    if (changes.rewardsPages) state.pages = changes.rewardsPages.newValue || {};
     if (changes.apiBase) state.apiBase = changes.apiBase.newValue || PRODUCTION;
     if (state.view !== "loading") render();
 });
@@ -509,13 +539,14 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
 /* ---------- start ---------- */
 
 (async () => {
-    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "autoDetect", "checkoutHints", "theme", "cardsCache"]);
+    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "autoDetect", "checkoutHints", "theme", "cardsCache"]);
     applyTheme(s.theme);
     Object.assign(state, {
         user: s.user,
         apiBase: s.apiBase,
         session: s.captureSession,
         overrides: s.portalOverrides || {},
+        pages: s.rewardsPages || {},
         settings: { autoDetect: s.autoDetect !== false, checkoutHints: Boolean(s.checkoutHints), theme: s.theme || "system" },
         cards: Array.isArray(s.cardsCache) ? s.cardsCache : null, // paint right away, refresh below
     });

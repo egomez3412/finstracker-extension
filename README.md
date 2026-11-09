@@ -44,11 +44,13 @@ To update: `git pull`, then click **Reload** on the extension in `chrome://exten
 
 ## How a points sync works
 
-1. **Update points** opens the issuer's sign-in page in a new tab.
-2. You sign in. Passwords, passkeys and codes are yours to enter; the extension never touches them.
-3. Once the rewards page settles, the extension reads the balance and posts the difference to Finstracker: an `earn` when the portal shows more, a `redeem` when it shows less, nothing when they match.
+1. **Update points** opens the card's page: the page where its balance was found last time, or else the sign-in page of the site that holds its points. Co-branded cards go to the airline or hotel (Delta, United, Southwest, American, Alaska, JetBlue, Aeroplan, British Airways, Flying Blue, Marriott, Hilton, Hyatt, IHG, Wyndham, Choice, Amazon, Bilt); other cards go to their bank (Amex, Chase, Capital One, Citi, Discover, Wells Fargo, Bank of America, U.S. Bank, Barclays).
+2. You sign in. Passwords, passkeys and codes are yours to enter; the extension never touches them and keeps waiting while you do.
+3. If the balance is not on the page you land on, the extension opens the card's rewards page, then follows the site's own rewards links ("Ultimate Rewards", "SkyMiles", "View rewards"), up to three steps, on the same site only.
+4. It reads the balance, preferring numbers next to the card's name and program, so a page listing several cards gives each card its own number, and posts the difference to Finstracker: an `earn` when the portal shows more, a `redeem` when it shows less.
+5. The page and spot that worked are remembered for that card.
 
-If the balance cannot be found, choose **Pick the balance** and click the number on the page. That spot is saved for the card and used from then on. Spots that work automatically are remembered too.
+If a card's points are somewhere else, open that page and choose **Use this tab** on the card (or **Pick the balance** to click the number itself). **Read this tab** works on any site; the extension asks for access to a site the first time.
 
 ## Code layout
 
@@ -63,11 +65,12 @@ lib/
   api.js                   Finstracker REST API client
   storage.js               chrome.storage.local keys and defaults
   parse.js                 Number parsing and the earn/redeem calculation
-  portals.js               Which page and selector to use for each card
+  portals.js               Which page and selector to use for each card, and where to go next
+  programs.js              Airline and hotel programs, issuer name spellings, words next to a balance
   merchants.js             Website → spending category, checkout detection, offer matching
   best-card.js             Ranking cards by value per dollar
   benefits.js              Credits, offers and annual fee summaries
-  inject/                  Functions run inside issuer pages (balance reader, watcher, offers reader)
+  inject/                  Functions run inside issuer pages (balance reader, watcher, offers reader, rewards-link finder)
   worker/                  Service worker parts: capture, offers sync, site hints, messages, sign-in
 portals.json               Issuer and card presets
 fonts/                     Inter and Fraunces (SIL Open Font License)
@@ -85,7 +88,7 @@ npm test
 - The session token lives only in `chrome.storage.local` and is sent as `Authorization: Bearer …` to Finstracker. It is never put into any web page.
 - Sign-in happens on finstracker.com in a normal tab, which hands the token to this extension by its ID. Only Finstracker's own origins can do that (`externally_connectable`).
 - Page readers run with `chrome.scripting.executeScript` and return only the text of the balance or offer tiles. They do not read form fields, cookies or tokens.
-- Host access is limited to Finstracker and the supported issuers. Checkout notes need broader site access, which is optional, asked for only when you turn the feature on, and given back when you turn it off.
+- Host access is limited to Finstracker, the supported banks and the airline, hotel and shop programs above. Other sites are asked for one at a time, only when you use Read this tab, Pick the balance or Use this tab there. Checkout notes need broader site access, which is optional, asked for only when you turn the feature on, and given back when you turn it off.
 - Finstracker re-checks every posted amount on the server (a redeem cannot exceed the balance, amounts must be valid numbers).
 
 ## Limitations

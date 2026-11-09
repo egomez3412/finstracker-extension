@@ -116,10 +116,10 @@ main { display: grid; gap: 16px; padding: 4px 16px 24px; }
 .row-amount { flex: none; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .group-label { padding: 12px 0 4px; }
 .group-label:first-child { padding-top: 0; }
-.row-detail { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.22s var(--ease); }
+.row-detail { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 0fr; transition: grid-template-rows 0.22s var(--ease); }
 .row-wrap.open .row-detail { grid-template-rows: 1fr; }
-.row-detail > div { overflow: hidden; }
-.row-detail-inner { display: grid; gap: 12px; padding: 0 0 14px 22px; }
+.row-detail > div { min-width: 0; overflow: hidden; }
+.row-detail-inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 0 14px 22px; }
 .row-state { display: inline-flex; align-items: center; gap: 6px; }
 .row-state.is-success { color: var(--dot-good); }
 .row-state.is-error { color: var(--color-red); }
@@ -134,11 +134,13 @@ main { display: grid; gap: 16px; padding: 4px 16px 24px; }
 .summary-kicker { font-size: 12px; font-weight: 500; }
 .summary-big { font-size: 24px; font-weight: 600; line-height: 1.25; }
 .card-summary-section-title { margin: 14px 0 0; font-size: 12px; font-weight: 600; }
-.summary-list { display: grid; margin: 8px 0 0; }
+.summary-list { display: grid; grid-template-columns: minmax(0, 1fr); margin: 8px 0 0; }
 .summary-list > div { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
 .summary-list > div:last-child { border-bottom: 0; }
 .summary-list dt { min-width: 0; overflow: hidden; color: var(--ink-secondary); text-overflow: ellipsis; white-space: nowrap; }
-.summary-list dd { margin: 0; color: var(--color-text); text-align: right; white-space: nowrap; }
+.card-summary .summary-list dt { flex: 1; }
+.summary-list dt { flex: none; }
+.summary-list dd { min-width: 0; margin: 0; overflow: hidden; color: var(--color-text); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .row-detail .summary-list { margin: 0; }
 .row-detail .summary-list > div { padding: 8px 0; }
 

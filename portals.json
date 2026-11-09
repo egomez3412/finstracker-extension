@@ -54,6 +54,12 @@
       "pointsUrlHint": "https://www.alaskaair.com/account",
       "matchUrl": "https://*.alaskaair.com/*",
       "selector": "[data-testid='mileage-balance'], [data-testid*='miles-balance'], [class*='MileagePlan'] [class*='balance'], [aria-label*='miles balance'], .mileage-balance"
+    },
+    "Barclays": {
+      "loginUrl": "https://www.barclaycardus.com/servicing/home",
+      "pointsUrlHint": "https://www.barclaycardus.com/servicing/rewards",
+      "matchUrl": "https://*.barclaycardus.com/*",
+      "selector": "[data-testid*='rewards-balance'], [class*='rewards-balance'], [class*='rewardsBalance']"
     }
   },
   "cards": {

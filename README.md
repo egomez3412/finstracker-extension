@@ -42,6 +42,18 @@ git clone https://github.com/egomez3412/finstracker-extension.git
 
 To update: `git pull`, then click **Reload** on the extension in `chrome://extensions`. Settings and saved balance spots are kept.
 
+## Autopilot
+
+**Run autopilot** (on a card, or for all cards at the top of Your cards) goes through the issuer's pages in one tab and updates everything for each card:
+
+1. **Balance**: points, or cash back for cash back cards (Amex "Reward Dollars", Discover "Cashback Bonus", "cash back"), plus new **points activity** lines ("Nov 8 · Dining · +500 pts") recorded as their own entries. The first read of a card only notes what is already there, so nothing is counted twice.
+2. **Offers**: clicks **Add to Card** on every offer tile (only inside offer tiles, never page buttons like "Add card"), then saves all offers to that card in Finstracker, marking the ones on the card. Banks without a known offers page are reached through their own "Offers" link.
+3. **Benefits**: reads the benefits page ("Uber Cash · $10 of $10 used", "$0 remaining", "Completed") and marks the matching credits used in Finstracker.
+
+Turn on **Daily autopilot** on a card and **Settings › Daily autopilot when signed in**, and it runs by itself once a day in a background tab while you are signed in to the card's site. A background run never waits: if a page needs a sign-in or your OK, it notes that and moves on.
+
+Each step also has its own button on the card: **Update points/cash back**, **Sync offers**, **Sync benefits**.
+
 ## How a points sync works
 
 1. **Update points** uses a tab that is already on the card's site. Otherwise it opens the page where the balance was found last time, or the sign-in page of the site that holds the points. Co-branded cards go to the airline or hotel (Delta, United, Southwest, American, Alaska, JetBlue, Aeroplan, British Airways, Flying Blue, Marriott, Hilton, Hyatt, IHG, Wyndham, Choice, Amazon, Bilt); other cards go to their bank (Amex, Chase, Capital One, Citi, Discover, Wells Fargo, Bank of America, U.S. Bank, Barclays). **Read this tab** does the same on the tab you are looking at.
@@ -96,6 +108,11 @@ npm run e2e -- picker
 npm run e2e -- guided
 npm run e2e -- amex     # prompt across page loads and in-app routes, Trusted Types page
 npm run e2e -- wander   # moving to another page while "Is this your balance?" is up
+npm run e2e -- cashback  # Reward Dollars next to a statement balance
+npm run e2e -- offers    # Add to Card on each offer, not the page's own buttons; saved per card
+npm run e2e -- benefits  # follows the Benefits link, marks fully used credits
+npm run e2e -- activity  # baseline first, then new activity lines recorded
+npm run e2e -- autopilot # balance, offers and benefits from one button
 ```
 
 ## Security model

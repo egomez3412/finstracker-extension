@@ -14,12 +14,14 @@
         const KEYWORDS = [
             "membership rewards", "ultimate rewards", "thankyou points",
             "miles", "points", "rewards balance", "rewards", "cash back",
-            "cashback", "balance",
+            "cashback", "balance", "reward dollars", "cash rewards",
         ];
         const STRONG_KEYWORDS = [
             "rewards balance", "ultimate rewards", "membership rewards",
             "thankyou points", "go far rewards", "mileage plan",
             "points balance", "miles balance", "cashback bonus", "cash back balance",
+            "reward dollars", "available cash back", "cash rewards balance", "available rewards",
+            "cash back earned", "rewards available",
         ];
         const NUMERIC_RX = /-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?/g;
         const HINT_WORDS = ((hints && hints.keywords) || []).map((w) => String(w).toLowerCase()).filter((w) => w.length >= 3);
@@ -289,12 +291,20 @@
                 // chosen number, e.g. "3,199 points" or "$45.00 cash back".
                 const tail = txt.slice(txt.indexOf(raw) + raw.length, txt.indexOf(raw) + raw.length + 24).toLowerCase();
                 if (unitHint === "points" && /^\s*(pts?|points?|miles?)\b/.test(tail)) score += 6;
-                if (unitHint === "cashback" && /^\s*(cash|back|cb|usd|dollars?)\b/.test(tail)) score += 4;
+                if (unitHint === "cashback" && /^\s*(cash|back|cb|usd|dollars?|reward dollars)\b/.test(tail)) score += 4;
 
-                // Bigger numbers usually = balance (not "Earn 3x"); also raw with commas wins.
-                if (/,/.test(raw)) score += 4;
-                if (n >= 1000) score += 2;
-                if (n >= 10000) score += 1;
+                if (unitHint === "cashback") {
+                    // Cash back is a dollar amount: "$45.67" beats a bare number; cents are a good sign.
+                    const before = txt.slice(Math.max(0, txt.indexOf(raw) - 2), txt.indexOf(raw));
+                    if (/[$]\s*$/.test(before)) score += 8;
+                    else if (/[$]/.test(txt)) score -= 6;
+                    if (/\.\d{2}$/.test(raw)) score += 2;
+                } else {
+                    // Bigger numbers usually = balance (not "Earn 3x"); also raw with commas wins.
+                    if (/,/.test(raw)) score += 4;
+                    if (n >= 1000) score += 2;
+                    if (n >= 10000) score += 1;
+                }
 
                 // Penalties: percentages, dates, phone numbers, "x" multipliers,
                 // credit limits, statement balances, payment due.
@@ -645,5 +655,110 @@
         });
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, highlight, clearHighlight, suggestions, settle };
+
+    // A same-site link or tab whose text has one of the words ("benefits", "credits", "activity").
+    // Followed by href, or clicked when it is a button. Returns { href } / { clicked } / null.
+    function findLink(words, avoid) {
+        const WANT = (words || []).map((w) => String(w).toLowerCase());
+        const AVOID = new Set(avoid || []);
+        const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?out|log ?out|refer|privacy|careers|español|compare)\b/;
+        const site = (h) => h.split(".").slice(-2).join(".");
+        let best = null;
+        for (const el of document.querySelectorAll("a[href], [role='link'], [role='tab'], button, [role='menuitem']")) {
+            const r = el.getBoundingClientRect();
+            if (r.width < 4 || r.height < 4) continue;
+            const text = `${el.innerText || el.textContent || ""} ${el.getAttribute("aria-label") || ""}`.toLowerCase().replace(/\s+/g, " ").trim();
+            if (!text || text.length > 60 || BAD.test(text)) continue;
+            const hit = WANT.findIndex((w) => text.includes(w));
+            if (hit < 0) continue;
+            let href = null;
+            if (el.tagName === "A") {
+                try {
+                    const u = new URL(el.getAttribute("href"), location.href);
+                    if (!/^https?:$/.test(u.protocol) || site(u.hostname) !== site(location.hostname)) continue;
+                    href = u.href;
+                } catch { continue; }
+                if (AVOID.has(href) || href === location.href) continue;
+            }
+            const score = 100 - hit * 5 - text.length / 10;
+            if (!best || score > best.score) best = { el, href, score };
+        }
+        if (!best) return null;
+        if (best.href) return { href: best.href };
+        try { best.el.click(); return { clicked: true }; } catch { return null; }
+    }
+
+    // Card benefits with their usage: [{ title, used, total, remaining, fullyUsed }].
+    // Reads tiles such as "Uber Cash · $10 of $10 used", "Digital Entertainment · $0 remaining",
+    // "Saks credit · Completed", and progress bars (aria-valuenow / aria-valuemax).
+    function readBenefits() {
+        const money = (s) => Number(String(s).replace(/[$,\s]/g, ""));
+        const OF = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:of|\/|out of)\s*\$\s?([\d,]+(?:\.\d{2})?)/i;
+        const USED = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:used|earned|redeemed|spent|received)/i;
+        const LEFT = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:remaining|left|available|to go)/i;
+        const DONE = /\b(fully used|completed|complete|all used|maxed out|no (credit|balance) (remaining|left)|you('ve| have) (used|earned) (it|this|the full))\b/i;
+        const found = [];
+        for (const el of document.querySelectorAll("li, article, section, div, [role='listitem']")) {
+            const text = (el.innerText || "").replace(/[  ]/g, " ").trim();
+            if (text.length < 8 || text.length > 400) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width < 4 || r.height < 4) continue;
+            let used = null, total = null, remaining = null;
+            const of = text.match(OF);
+            if (of) { used = money(of[1]); total = money(of[2]); }
+            const u = text.match(USED); if (u && used == null) used = money(u[1]);
+            const l = text.match(LEFT); if (l) remaining = money(l[1]);
+            const bar = el.querySelector("[role='progressbar'][aria-valuenow]");
+            if (bar && used == null) {
+                const now = Number(bar.getAttribute("aria-valuenow")), max = Number(bar.getAttribute("aria-valuemax") || 100);
+                if (Number.isFinite(now) && max > 0) { used = now; total = max; }
+            }
+            const done = DONE.test(text);
+            if (used == null && remaining == null && !done) continue;
+            const title = text.split(/\n+/).map((t) => t.trim()).find((t) => /[a-z]{3}/i.test(t) && t.length <= 80 && !/\$\s?\d/.test(t) && !/^(used|remaining|earned|completed?|details|view|see|learn more)\b/i.test(t));
+            if (!title) continue;
+            const fullyUsed = done || (total > 0 && used >= total) || (remaining === 0 && (used > 0 || total > 0 || /\$\s?0(\.00)?\s*(remaining|left)/i.test(text)));
+            found.push({ el, title, used, total, remaining, fullyUsed });
+        }
+        // Keep the smallest block for each benefit (a tile, not the list that holds it).
+        return found
+            .filter((f) => !found.some((g) => g !== f && f.el.contains(g.el) && g.title === f.title))
+            .filter((f, i, all) => all.findIndex((g) => g.title === f.title) === i)
+            .slice(0, 60)
+            .map(({ title, used, total, remaining, fullyUsed }) => ({ title, used, total, remaining, fullyUsed }));
+    }
+
+    // Rewards activity lines: [{ date, description, amount }], amount negative for redemptions.
+    // A line has a date and a signed or labelled amount ("+1,250 pts", "-5,000", "$2.50").
+    function readActivity(unitHint) {
+        const DATE = /\b((?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,\s*\d{4})?|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b/i;
+        const AMOUNT = unitHint === "cashback"
+            ? /([+\-−]?)\s*\$\s?([\d,]+\.\d{2})/g
+            : /([+\-−]?)\s*([\d]{1,3}(?:,\d{3})+|\d+)\s*(pts|points|miles)?\b/gi;
+        const rows = [];
+        for (const el of document.querySelectorAll("tr, li, [role='row'], [role='listitem']")) {
+            const text = (el.innerText || "").replace(/[  ]/g, " ").replace(/\s+/g, " ").trim();
+            if (text.length < 8 || text.length > 220) continue;
+            const date = text.match(DATE);
+            if (!date) continue;
+            const rest = text.replace(date[0], " ");
+            let pick = null;
+            for (const m of rest.matchAll(AMOUNT)) {
+                const value = Number(m[2].replace(/,/g, ""));
+                if (!Number.isFinite(value) || value === 0) continue;
+                const labelled = Boolean(m[1]) || Boolean(m[3]) || unitHint === "cashback";
+                if (!labelled) continue;
+                pick = { sign: m[1] === "-" || m[1] === "−" ? -1 : 1, value, raw: m[0] };
+            }
+            if (!pick) continue;
+            const redeem = /\b(redeem|redeemed|redemption|transfer(red)? to|used for|pay with points|reversal|returned)\b/i.test(rest);
+            const description = rest.replace(pick.raw, " ").replace(/(^|\s)[·•|–—:\-]+(?=\s|$)/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+            if (!/[a-z]{3}/i.test(description)) continue;
+            rows.push({ date: date[0], description, amount: pick.value * (pick.sign < 0 || redeem ? -1 : 1) });
+            if (rows.length >= 60) break;
+        }
+        return rows.length >= 2 ? rows : []; // a single matching line is more likely noise than a list
+    }
+
+    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, readActivity, highlight, clearHighlight, suggestions, settle };
 })();

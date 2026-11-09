@@ -81,3 +81,10 @@ test("cards for a page", () => {
     assert.deepEqual(cardsForUrl(cards, "https://www.delta.com/myprofile/skymiles-overview", {}, portals).map((c) => c.id), ["1"]);
     assert.deepEqual(cardsForUrl(cards, "https://global.americanexpress.com/rewards", {}, portals).map((c) => c.id), ["2"]);
 });
+
+test("cash back cards look for dollar balances, not points currencies", () => {
+    const h = balanceHints({ displayName: "Blue Cash Everyday", issuer: "American Express", rewardType: "cashback" });
+    assert.ok(h.keywords.includes("reward dollars") && h.keywords.includes("cashback bonus"));
+    assert.ok(!h.keywords.includes("membership rewards"));
+    assert.deepEqual(h.cardWords, ["blue", "everyday"]);
+});

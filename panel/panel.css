@@ -183,3 +183,5 @@ main { display: grid; gap: 16px; padding: 4px 16px 24px; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+.toggle-inline { margin-left: auto; }
+.summary-list dd .toggle { vertical-align: middle; }

@@ -159,6 +159,82 @@ try {
     const s = await waitFor((s) => s?.status === "confirm" && s.pending?.value === 98765, "read after moving to rewards", 30000);
     log("after moving:", s.status, s.pending?.value, s.currentUrl);
     ok = first.pending?.value === 2000 && s.pending?.value === 98765;
+  } else if (scenario === "cashback") {
+    // A cash back card: the dollar "Reward Dollars" balance next to a statement balance.
+    await sw.evaluate(() => chrome.storage.local.set({ rewardsPages: { c2: { url: "http://localhost:3000/bank/rewards", source: "user" } } }));
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await panel.bringToFront();
+    await panel.click('[data-act="toggle-card"][data-id="c2"]');
+    await panel.click('[data-act="update"][data-id="c2"]');
+    const s = await waitFor((s) => s?.status === "confirm" || s?.status === "error", "cash back confirm");
+    log("found:", s.status, s.pending?.value, "note:", await note(bank));
+    await bank.click('#fins-status-root [data-action="confirm"]');
+    await waitFor(() => state.transactions.length > 0, "transaction");
+    log("transactions:", JSON.stringify(state.transactions), "cash back:", state.cards.c2.currentCashBack);
+    ok = s.pending?.value === 123.45 && state.cards.c2.currentCashBack === 123.45 && state.transactions[0].unit === "cashback";
+  } else if (scenario === "offers") {
+    // On the offers page: add every offer to the card, never the page's own "Add card" button, then save them.
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/offers"); await bank.bringToFront();
+    await panel.click('[data-act="sync-offers"][data-id="c1"]').catch(() => {});
+    const s = await waitFor((s) => s?.kind === "offers" && (s.status === "synced" || s.status === "error"), "offers synced", 60000);
+    const buttons = await bank.evaluate(() => [...document.querySelectorAll(".tile button")].map((b) => b.textContent));
+    const decoy = await bank.evaluate(() => document.body.dataset.decoy || "not clicked");
+    log("status:", s.statusLabel || s.lastError, "| buttons now:", buttons.join(", "), "| page-level Add card:", decoy);
+    log("saved:", JSON.stringify(state.offers.map((o) => [o.merchant, o.activated, o.cardId])));
+    ok = s.status === "synced" && buttons.every((b) => b === "Added") && decoy === "not clicked" && state.offers.length === 3 && state.offers.every((o) => o.activated && o.cardId === "c1");
+  } else if (scenario === "benefits") {
+    // Sync benefits from the dashboard: follows the Benefits link, marks the fully used credit only.
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await panel.click('[data-act="sync-benefits"][data-id="c1"]').catch(() => {});
+    const s = await waitFor((s) => s?.kind === "benefits" && (s.status === "synced" || s.status === "error"), "benefits checked", 60000);
+    log("status:", s.statusLabel || s.lastError, "| on", bank.url(), "| perks:", JSON.stringify(state.perks.map((x) => [x.id, x.used])));
+    ok = s.status === "synced" && state.perks.find((x) => x.id === "p-uber").used && !state.perks.find((x) => x.id === "p-de").used;
+  } else if (scenario === "activity") {
+    // First sync: baseline (no activity entries). Next sync: the new line is recorded with its
+    // description, and the balance change only covers the rest.
+    await sw.evaluate(() => chrome.storage.local.set({ portalOverrides: { c1: { matchUrl: "http://localhost:3000/*", selector: "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)", source: "user-picker" } }, rewardsPages: { c1: { url: "http://localhost:3000/bank/rewards", source: "user" } } }));
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/rewards"); await sleep(1500);
+    await bank.bringToFront();
+    await panel.click('[data-act="read-tab"][data-id="c1"]').catch(() => {});
+    await waitFor((s) => s?.status === "synced", "first sync");
+    log("after first sync:", JSON.stringify(state.transactions.map((t) => [t.type, t.amount, t.note])));
+    await sw.evaluate(() => chrome.storage.local.set({ captureSession: null }));
+    await bank.goto("http://localhost:3000/bank/rewards?more=1"); await sleep(1500);
+    await bank.bringToFront();
+    await panel.click('[data-act="read-tab"][data-id="c1"]').catch(() => {});
+    await waitFor((s) => s?.status === "synced", "second sync");
+    await sleep(500);
+    log("after second sync:", JSON.stringify(state.transactions.map((t) => [t.type, t.amount, t.note])), "points:", state.points, "| note:", await note(bank));
+    ok = state.transactions.length === 2 && state.transactions[1].note === "Nov 8 · Dining" && state.transactions[1].amount === 500 && state.points === 99265;
+  } else if (scenario === "autopilot") {
+    // One button: balance, then offers (added + saved), then benefits, in one tab.
+    await sw.evaluate(() => chrome.storage.local.set({ portalOverrides: { c1: { matchUrl: "http://localhost:3000/*", selector: "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)", source: "user-picker" } }, rewardsPages: { c1: { url: "http://localhost:3000/bank/rewards", source: "user" } } }));
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await panel.bringToFront();
+    await panel.click('[data-act="run-autopilot"][data-id="c1"]');
+    await sleep(1500);
+    await panel.screenshot({ path: `${SHOTS}/autopilot-panel.png` });
+    let run;
+    const end = Date.now() + 120000;
+    while (Date.now() < end) {
+      run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot"]));
+      if (!run.autopilotRun && run.autopilot?.c1?.lastRun) break;
+      await sleep(1000);
+    }
+    const results = run.autopilot?.c1?.results;
+    log("results:", JSON.stringify(results));
+    log("points:", state.points, "| offers saved:", state.offers.length, "| perks:", JSON.stringify(state.perks.map((x) => [x.id, x.used])), "| tabs:", ctx.pages().length);
+    await panel.click('[data-act="toggle-card"][data-id="c1"]').catch(() => {});
+    await sleep(300);
+    await panel.screenshot({ path: `${SHOTS}/autopilot-card.png` });
+    ok = state.points === 98765 && state.offers.length === 3 && state.perks.find((x) => x.id === "p-uber").used && /Balance/.test(results?.balance || "") && /offers saved/.test(results?.offers || "");
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

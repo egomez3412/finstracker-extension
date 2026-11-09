@@ -11,11 +11,13 @@ import { onExternalMessage } from "./lib/worker/auth-bridge.js";
 import { onTabClosed, processTab } from "./lib/worker/capture.js";
 import { onMessage } from "./lib/worker/router.js";
 import { forgetTabHints, onTabVisited } from "./lib/worker/site-hints.js";
+import { redrawBoard } from "./lib/worker/autopilot.js";
 
 async function onNavigated(tabId, url, finished) {
     if (!finished) return; // read pages once they have loaded, not while they unload
     try {
         processTab(tabId, url).catch((err) => console.warn("[finstracker] read failed", err));
+        redrawBoard(tabId).catch(() => {}); // the autopilot board, after the portal page reloads
         await onTabVisited(tabId, url);
     } catch (err) {
         console.warn("[finstracker] navigation handler", err);

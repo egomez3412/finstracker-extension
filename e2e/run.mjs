@@ -289,8 +289,10 @@ try {
     let run;
     const end = Date.now() + 240000;
     await sleep(2000);
-    let lastLine = "";
+    let lastLine = "", maxPages = ctx.pages().length, boardSeen = false;
     while (Date.now() < end) {
+      maxPages = Math.max(maxPages, ctx.pages().length);
+      if (!boardSeen) boardSeen = await bank.evaluate(() => Boolean(document.getElementById("fins-board-root"))).catch(() => false);
       run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot", "captureSession"]));
       if (process.env.DEBUG) { const c = run.captureSession; const line = c ? `${c.cardId} ${c.kind} ${c.status} ${JSON.stringify(c.switchResult || null)} ${c.currentUrl || ""}` : "none"; if (line !== lastLine) { log("  ", line); lastLine = line; } }
       if (!run.autopilotRun) { if (process.env.DEBUG) log("  ap ended; keys:", JSON.stringify(Object.keys(await sw.evaluate(() => chrome.storage.local.get(null))))); break; }
@@ -302,8 +304,11 @@ try {
     log("balances:", state.cards.c1.currentPoints, state.cards.c3.currentPoints, state.cards.c2.currentCashBack);
     log("offers:", JSON.stringify(state.offers.map((o) => [o.cardId, o.merchant, o.activated])));
     log("perks:", JSON.stringify(state.perks.map((x) => [x.id, x.used])), "| tabs:", ctx.pages().length, "| note:", await note(bank));
+    const pagesAfter = ctx.pages().length;
+    log("side windows: most pages open at once", maxPages, "| after", pagesAfter, "| board shown:", boardSeen, "| board at end:", await bank.evaluate(() => Boolean(document.getElementById("fins-board-root"))));
+    await bank.screenshot({ path: `${SHOTS}/portal-board.png` });
     const offersOf = (id) => state.offers.filter((o) => o.cardId === id).map((o) => o.merchant).sort().join(",");
-    ok = /3 cards/.test(popup || "") && state.cards.c1.currentPoints === 98765 && state.cards.c3.currentPoints === 45000 && state.cards.c2.currentCashBack === 123.45
+    ok = maxPages >= pagesAfter + 2 && boardSeen && /3 cards/.test(popup || "") && state.cards.c1.currentPoints === 98765 && state.cards.c3.currentPoints === 45000 && state.cards.c2.currentCashBack === 123.45
       && offersOf("c1") === "Best Buy,Chipotle,Delta" && offersOf("c3") === "Hilton,Saks" && offersOf("c2") === "" && state.offers.every((o) => o.activated)
       && state.perks.find((x) => x.id === "p-uber").used && state.perks.find((x) => x.id === "p-dining").used && !state.perks.find((x) => x.id === "p-de").used;
   } else if (scenario === "viewing") {
@@ -356,7 +361,33 @@ try {
     ok = /viewing Amex Platinum Card/.test(popup || "") && /4 of your cards/.test(popup || "") && chosen === "c4" && s1.cardId === "c4" && s2.cardId === "c4" && s2.followedFrom === "Amex Gold Card"
       && state.cards.c4.currentPoints === 150000 && state.cards.c3.currentPoints === 45000 && state.cards.c1.currentPoints === 98765
       && offersOf("c3") === "Hilton,Saks" && offersOf("c4") === "Resy" && offersOf("c1") === "Best Buy,Chipotle,Delta"
-      && state.cards.c5.currentPoints === 0 && offersOf("c5") === "" && /Skipped/.test(await note(bank)); // Green isn't in the switcher: nothing saved for it
+      && state.cards.c5.currentPoints === 0 && offersOf("c5") === "" && /Skipped/.test(JSON.stringify((await sw.evaluate(() => chrome.storage.local.get("autopilotLastBoard"))).autopilotLastBoard)); // Green isn't in the switcher: nothing saved for it
+  } else if (scenario === "addall") {
+    // Amex-style offers page: every offer gets added (new formats, redrawn list, Load more, a lost click).
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/amex-offers"); await bank.bringToFront();
+    await panel.click('[data-act="sync-offers"][data-id="c1"]').catch(() => {});
+    const s = await waitFor((s) => s?.kind === "offers" && (s.status === "synced" || s.status === "error"), "offers synced", 120000);
+    const buttons = await bank.evaluate(() => [...document.querySelectorAll("#offer-list button")].map((b) => b.textContent));
+    const decoy = await bank.evaluate(() => document.body.dataset.decoy || "not clicked");
+    log("status:", s.statusLabel || s.lastError, "| buttons:", buttons.join(", "), "| decoy:", decoy);
+    log("saved:", state.offers.length, JSON.stringify(state.offers.map((o) => [o.merchant, o.activated])));
+    ok = s.status === "synced" && buttons.length === 8 && buttons.every((b) => /Added/.test(b)) && decoy === "not clicked" && state.offers.length === 8 && state.offers.every((o) => o.activated);
+  } else if (scenario === "amexbenefits") {
+    // Amex-style benefits: usage behind "View details"; reports each benefit and what happened to it.
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/amex-benefits"); await bank.bringToFront();
+    await panel.click('[data-act="sync-benefits"][data-id="c1"]').catch(() => {});
+    const s = await waitFor((s) => s?.kind === "benefits" && (s.status === "synced" || s.status === "error"), "benefits read", 60000);
+    await sleep(500);
+    log("status:", s.statusLabel || s.lastError);
+    log("rows:", JSON.stringify(s.rows));
+    log("perks:", JSON.stringify(state.perks.filter((x) => x.cardId === "c1").map((x) => [x.id, x.used])));
+    await bank.screenshot({ path: `${SHOTS}/amex-benefits.png` });
+    const used = (id) => state.perks.find((x) => x.id === id).used;
+    ok = s.status === "synced" && used("p-uber") && used("p-saks") && !used("p-de") && (s.rows || []).length === 4 && /no matching credit/.test(JSON.stringify(s.rows));
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

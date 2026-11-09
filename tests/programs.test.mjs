@@ -60,6 +60,8 @@ test("a saved rewards page opens first and widens the match", () => {
 test("pages to remember drop the query string but keep hash routes", () => {
     assert.equal(pageToRemember("https://secure.chase.com/web/auth/dashboard?token=abc#/dashboard/ultimateRewards"), "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards");
     assert.equal(pageToRemember("chrome://extensions"), null);
+    assert.equal(pageToRemember("https://global.americanexpress.com/rewards?opaqueAccountId=OQX90DG3JL6R66N"), "https://global.americanexpress.com/rewards?opaqueAccountId=OQX90DG3JL6R66N");
+    assert.equal(pageToRemember("https://x.com/r?accountId=1&session_id=abc&state=xyz"), "https://x.com/r?accountId=1");
 });
 
 test("hops: points page first, then links, then stop", () => {

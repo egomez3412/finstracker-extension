@@ -132,6 +132,7 @@
                 if (!isVisible(n)) continue;
                 const txt = pickText(n);
                 if (!txt) continue;
+                if (unitHint === "points" && /[$€£]\s*-?\d/.test(txt)) continue; // a dollar amount is not points
                 if (regexStr) {
                     try {
                         const rx = new RegExp(regexStr);

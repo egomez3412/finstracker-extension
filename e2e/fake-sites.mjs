@@ -11,7 +11,9 @@ export function startServer({ port = 3000 } = {}) {
         cards: {
             c1: { id: "c1", displayName: "Sapphire Preferred", issuer: "Mock Bank", rewardType: "points", currentPoints: 1000, currentCashBack: 0, pointValueCents: 1.25, multipliers: { dining: 3 }, program: "Chase Ultimate Rewards" },
             c2: { id: "c2", displayName: "Blue Cash Everyday", issuer: "Mock Bank", rewardType: "cashback", currentPoints: 0, currentCashBack: 0, pointValueCents: 1, multipliers: { groceries: 3 }, program: "Cash back" },
-            c3: { id: "c3", displayName: "Gold Card", issuer: "Mock Bank", rewardType: "points", currentPoints: 0, currentCashBack: 0, pointValueCents: 1.6, multipliers: { dining: 4 }, program: "Membership Rewards" },
+            c3: { id: "c3", displayName: "Amex Gold Card", issuer: "Mock Bank", rewardType: "points", currentPoints: 0, currentCashBack: 0, pointValueCents: 1.6, multipliers: { dining: 4 }, program: "Membership Rewards" },
+            c5: { id: "c5", displayName: "Amex Green Card", issuer: "Mock Bank", rewardType: "points", currentPoints: 0, currentCashBack: 0, pointValueCents: 1.6, multipliers: { travel: 3 }, program: "Membership Rewards" },
+            c4: { id: "c4", displayName: "Amex Platinum Card", issuer: "Mock Bank", rewardType: "points", currentPoints: 0, currentCashBack: 0, pointValueCents: 1.6, multipliers: { travel: 5 }, program: "Membership Rewards" },
         },
         transactions: [],
         perks: [
@@ -75,7 +77,7 @@ export function startServer({ port = 3000 } = {}) {
             const el = (tag, text, style) => { const n = document.createElement(tag); if (text) n.textContent = text; if (style) n.style.cssText = style; return n; };
             const tile = (lines) => { const d = el("div"); d.className = "tile"; for (const [t, big] of lines) d.append(el("div", t, big ? "font-size:28px" : "")); return d; };
             const more = location.search.includes("more");
-            const ACCOUNTS = { c1: ["Sapphire Preferred (...9876)", "OQX90"], c3: ["Gold Card (...3001)", "GLD31"] };
+            const ACCOUNTS = { c1: ["Sapphire Preferred (...9876)", "OQX90"], c3: ["Gold Card (...3001)", "GLD31"], c4: ["The Platinum Card® (...1004)", "PLT04"] };
             const acct = (document.cookie.match(/acct=(c[0-9])/) || [])[1] || "c1";
             function switcher() {
                 const h = el("header"); h.id = "acct";
@@ -109,7 +111,9 @@ export function startServer({ port = 3000 } = {}) {
                 } else if (location.pathname === "/bank/rewards") {
                     root.append(
                         tile([["Freedom Unlimited (...1234)"], ["Cash back rewards"], ["12,345", true], ["points"]]),
-                        acct === "c3" ? tile([["Gold Card (...3001)"], ["Membership Rewards"], ["45,000", true], ["points"]]) : tile([["Sapphire Preferred (...9876)"], ["Ultimate Rewards"], [more ? "99,265" : "98,765", true], ["points"]]),
+                        acct === "c3" ? tile([["Gold Card (...3001)"], ["Membership Rewards"], ["45,000", true], ["points"]])
+                            : acct === "c4" ? tile([["The Platinum Card® (...1004)"], ["Membership Rewards"], ["150,000", true], ["points"]])
+                            : tile([["Sapphire Preferred (...9876)"], ["Ultimate Rewards"], [more ? "99,265" : "98,765", true], ["points"]]),
                         tile([["Blue Cash Everyday (...5555)"], ["Statement balance"], ["$642.10"], ["Reward Dollars"], ["$123.45", true]]),
                     );
                     const list = el("ul"); list.id = "activity";
@@ -120,7 +124,9 @@ export function startServer({ port = 3000 } = {}) {
                 } else if (location.pathname === "/bank/offers") {
                     const decoy = el("button", "Add card"); decoy.addEventListener("click", () => { document.body.dataset.decoy = "clicked"; });
                     root.append(decoy);
-                    const offers = acct === "c3" ? [["Saks", "Spend $250, get $50 back", false], ["Hilton", "Earn 5,000 points", false]] : [["Best Buy", "Spend $100, get $15 back", false], ["Chipotle", "5% back", true], ["Delta", "Earn 2,000 points", false]];
+                    const offers = acct === "c3" ? [["Saks", "Spend $250, get $50 back", false], ["Hilton", "Earn 5,000 points", false]]
+                        : acct === "c4" ? [["Resy", "Spend $100, get $20 back", false]]
+                        : [["Best Buy", "Spend $100, get $15 back", false], ["Chipotle", "5% back", true], ["Delta", "Earn 2,000 points", false]];
                     for (const [merchant, badge, added] of offers) {
                         const t = tile([[merchant], [badge], ["Expires Dec 31, 2026"]]);
                         const b = el("button", added ? "Added" : "Add to Card");

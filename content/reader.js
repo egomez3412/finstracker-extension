@@ -32,6 +32,7 @@
             if (!CARD_WORDS.length) return -1;
             let node = el;
             for (let d = 0; d < 8 && node; d++) {
+                if (node === document.body || node === document.documentElement) return -1; // not the whole page (or our own notes)
                 const text = (node.innerText || node.textContent || "").toLowerCase();
                 if (text.length > 1500) return -1;
                 if (CARD_WORDS.some((w) => text.includes(w))) return d;
@@ -777,8 +778,10 @@
         const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
         // Already selected: the switcher (or a selected option) shows this card.
-        const alreadySelected = () => [...document.querySelectorAll("[aria-haspopup], [aria-selected='true'], [aria-current='true'], [aria-current='page'], [aria-checked='true']")]
-            .some((el) => { const t = text(el); return shown(el) && t.length <= 90 && names(t, want) && !OFFER.test(t); });
+        const alreadySelected = () => {
+            const seen = detectCard([{ id: "this", words: want }, ...otherSets.map((ws, i) => ({ id: `other${i}`, words: ws }))]);
+            return Boolean(seen && seen.strong && seen.id === "this");
+        };
         const anySwitcher = () => [...document.querySelectorAll("[aria-haspopup], [role='listbox'], [role='tablist'], [role='option']")].some(shown)
             || [...document.querySelectorAll("button, a")].some((el) => shown(el) && otherSets.some((ws) => names(text(el), ws)));
         // Bank pages draw late: give the switcher a few seconds to appear.
@@ -808,5 +811,64 @@
         return { ok: true, clicked: true };
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, readActivity, highlight, clearHighlight, suggestions, settle, switchAccount };
+
+    // Which of the user's cards the page is showing right now: the name in the card switcher, the
+    // top bar, a selected tab or a heading ("Platinum Card® •••• 1004"). cards: [{ id, words }]
+    // (each card's distinctive name words). Returns { id, score, text } or null when no card is
+    // named, or two cards are named equally (a page listing several cards).
+    function detectCard(cards) {
+        const list = (cards || []).map((c) => ({ id: c.id, words: (c.words || []).map((w) => String(w).toLowerCase()).filter(Boolean) })).filter((c) => c.words.length);
+        if (!list.length) return null;
+        const OFFER = /(\$\s?\d+(?:[.,]\d{1,2})?\s*(?:cash\s*)?back|\d+(?:\.\d+)?\s*%\s*(?:cash\s*)?back|earn\s+[\d,]+)/i;
+        const ours = "#fins-launcher-root, #fins-status-root, #fins-prompt-root, #fins-picker-host";
+        const seen = new Set();
+        const scores = new Map();
+        const consider = (el, weight) => {
+            if (!el || seen.has(el) || el.closest(ours)) return;
+            seen.add(el);
+            const r = el.getBoundingClientRect();
+            if (r.width < 2 || r.height < 2) return;
+            const t = `${el.innerText || el.textContent || ""} ${el.getAttribute("aria-label") || ""}`.toLowerCase().replace(/\s+/g, " ").trim();
+            if (!t || t.length > 120 || OFFER.test(t)) return;
+            const top = r.top + scrollY < 220 ? 3 : 0; // the bar at the top of the page
+            for (const c of list) {
+                if (!c.words.every((w) => t.includes(w))) continue;
+                const s = weight + top;
+                const best = scores.get(c.id);
+                if (!best || s > best.score) scores.set(c.id, { id: c.id, score: s, text: t.slice(0, 80) });
+            }
+        };
+        // Strongest signals first: the switcher button and selected items, then the page's top bar and headings.
+        document.querySelectorAll("[aria-haspopup], [aria-selected='true'], [aria-current='true'], [aria-current='page'], [aria-checked='true']").forEach((el) => consider(el, 8));
+        document.querySelectorAll("header *, [role='banner'] *, nav *").forEach((el) => { if (el.children.length <= 3) consider(el, 5); });
+        document.querySelectorAll("h1, h2, [role='heading']").forEach((el) => consider(el, 4));
+        // Anything else near the top of the page that names a card on its own.
+        for (const el of document.body ? document.body.querySelectorAll("*") : []) {
+            if (el.children.length > 3) continue;
+            const r = el.getBoundingClientRect();
+            if (r.top + scrollY < 220) consider(el, 1);
+        }
+        const ranked = [...scores.values()].sort((a, b) => b.score - a.score);
+        if (!ranked.length) return null;
+        if (ranked[1] && ranked[1].score === ranked[0].score) return null; // two cards named just as strongly
+        // Strong: named by the switcher, a selected item or the top bar, not just somewhere on the page.
+        return { ...ranked[0], strong: ranked[0].score >= 7 };
+    }
+
+    // Does the balance found last sit in a block that names this card ("Blue Cash Everyday (...5555)")?
+    function foundNearCard(words) {
+        const want = (words || []).map((w) => String(w).toLowerCase()).filter(Boolean);
+        let node = lastFound && lastFound.isConnected ? lastFound : null;
+        if (!want.length || !node) return false;
+        for (let d = 0; d < 6 && node; d++) {
+            if (node === document.body || node === document.documentElement) return false; // not the whole page (or our own notes)
+            const t = (node.innerText || node.textContent || "").toLowerCase();
+            if (t.length > 700) return false;
+            if (want.every((w) => t.includes(w))) return true;
+            node = node.parentElement;
+        }
+        return false;
+    }
+
+    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, readActivity, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard };
 })();

@@ -31,21 +31,23 @@
     let current = payload;
 
     const cardsHere = () => current.cards || [];
+    const viewing = () => cardsHere().find((c) => c.id === current.current) || null;
     function chosenCard() {
         const cards = cardsHere();
         if (cards.length === 1) return cards[0];
         const id = one.querySelector("select")?.value;
-        return cards.find((c) => c.id === id) || cards[0] || null;
+        return cards.find((c) => c.id === id) || viewing() || cards[0] || null;
     }
     function render() {
         const cards = cardsHere();
         const names = cards.map((c) => `<strong>${esc(c.displayName)}</strong>`);
+        const on = viewing();
         body.innerHTML = cards.length === 1
             ? `Update ${names[0]} from ${esc(site)}: balance, offers and benefits.`
-            : `${cards.length} of your cards use ${esc(site)}: ${names.join(", ")}. Autopilot updates each one's balance, adds its offers and checks its benefits.`;
+            : `${on ? `You're viewing <strong>${esc(on.displayName)}</strong>. ` : ""}${cards.length} of your cards use ${esc(site)}: ${names.join(", ")}. Autopilot updates each one's balance, adds its offers and checks its benefits.`;
         runBtn.textContent = cards.length > 1 ? `Run autopilot for ${cards.length} cards` : "Run autopilot";
         one.innerHTML = `
-            ${cards.length > 1 ? `<label class="fins-prompt-label">Just one card<select aria-label="Card">${cards.map((c) => `<option value="${esc(c.id)}">${esc(c.displayName)}</option>`).join("")}</select></label>` : ""}
+            ${cards.length > 1 ? `<label class="fins-prompt-label">Just one card<select aria-label="Card">${cards.map((c) => `<option value="${esc(c.id)}"${c.id === current.current ? " selected" : ""}>${esc(c.displayName)}${c.id === current.current ? " (on screen)" : ""}</option>`).join("")}</select></label>` : ""}
             <div class="fins-prompt-actions">
                 <button class="fins-prompt-btn" type="button" data-act="sync">Sync this page</button>
                 <button class="fins-prompt-btn" type="button" data-act="pick">Pick the balance</button>
@@ -70,7 +72,7 @@
         if (act === "run") {
             busy(true);
             setStatus("Starting autopilot…", "busy");
-            const r = await send({ type: "runAutopilot", cardIds: cardsHere().map((c) => c.id), here: true });
+            const r = await send({ type: "runAutopilot", cardIds: cardsHere().map((c) => c.id), here: true, current: current.current || null });
             if (r?.ok === false) { setStatus(r.error || "Couldn't start autopilot", "error"); busy(false); return; }
             remove(); // the page's status note shows each step from here
             return;

@@ -10,6 +10,7 @@
 
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     let cards = payload.cards || [];
+    let currentId = payload.current || null; // the card the page shows
     let pos = { side: "right", top: 0.62 };
     let open = false;
     let message = "";
@@ -57,7 +58,7 @@
     const tab = shadow.querySelector(".tab");
     const menu = shadow.querySelector(".menu");
 
-    const selectedCard = () => cards.find((c) => c.id === menu.querySelector("select")?.value) || cards[0] || null;
+    const selectedCard = () => cards.find((c) => c.id === menu.querySelector("select")?.value) || cards.find((c) => c.id === currentId) || cards[0] || null;
 
     function place() {
         const y = Math.min(Math.max(pos.top * innerHeight, 8), innerHeight - 54);
@@ -73,7 +74,7 @@
         const unit = card?.rewardType === "cashback" ? "cash back" : "points";
         menu.innerHTML = `
             <div class="head"><img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt="" width="18" height="18"><span>Finstracker</span><button type="button" class="x" data-act="close" aria-label="Close">×</button></div>
-            ${cards.length > 1 ? `<select aria-label="Card">${cards.map((c) => `<option value="${esc(c.id)}"${c.id === card?.id ? " selected" : ""}>${esc(c.displayName)}</option>`).join("")}</select>` : card ? `<div class="muted" style="margin:0 2px 8px">${esc(card.displayName)}</div>` : ""}
+            ${cards.length > 1 ? `<select aria-label="Card">${cards.map((c) => `<option value="${esc(c.id)}"${c.id === card?.id ? " selected" : ""}>${esc(c.displayName)}${c.id === currentId ? " (on screen)" : ""}</option>`).join("")}</select>` : card ? `<div class="muted" style="margin:0 2px 8px">${esc(card.displayName)}</div>` : ""}
             ${card ? `
                 <button type="button" class="item primary" data-act="sync">Sync ${unit} <small>from this page</small></button>
                 <button type="button" class="item" data-act="pick">Pick the balance</button>
@@ -107,7 +108,7 @@
         if (!card) return;
         // Offers, benefits and autopilot take a while: the page's status note shows their progress.
         if (name === "autopilot-all") {
-            send({ type: "runAutopilot", cardIds: cards.map((c) => c.id), here: true });
+            send({ type: "runAutopilot", cardIds: cards.map((c) => c.id), here: true, current: currentId });
             return toggle(false);
         }
         if (name === "offers" || name === "benefits" || name === "autopilot") {
@@ -164,7 +165,7 @@
     }
 
     window.__finsLauncher = {
-        update(next) { cards = next?.cards || cards; if (open) render(); },
+        update(next) { cards = next?.cards || cards; currentId = next?.current ?? currentId; if (open) render(); },
         remove,
     };
     chrome.storage.local.get("launcherPos").then(({ launcherPos }) => {

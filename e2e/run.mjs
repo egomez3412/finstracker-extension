@@ -23,7 +23,7 @@ let ok = false;
 try {
   let [sw] = ctx.serviceWorkers();
   if (!sw) sw = await ctx.waitForEvent("serviceworker", { timeout: 10000 });
-  sw.on("console", (m) => { if (m.type() !== "log") log("sw", m.type(), m.text()); });
+  sw.on("console", (m) => { if (m.type() !== "log" || (process.env.DEBUG && m.text().startsWith("[dbg]"))) log("sw", m.type(), m.text()); });
   const extId = new URL(sw.url()).host;
   await sw.evaluate(() => chrome.storage.local.set({ token: "test-token", apiBase: "http://localhost:3000", user: { username: "e2e" }, rewardsPages: { c1: { url: "http://localhost:3000/bank/dashboard", source: "learned" } } }));
   const session = () => sw.evaluate(() => chrome.storage.local.get("captureSession").then((r) => r.captureSession || null));
@@ -293,7 +293,7 @@ try {
     while (Date.now() < end) {
       run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot", "captureSession"]));
       if (process.env.DEBUG) { const c = run.captureSession; const line = c ? `${c.cardId} ${c.kind} ${c.status} ${JSON.stringify(c.switchResult || null)} ${c.currentUrl || ""}` : "none"; if (line !== lastLine) { log("  ", line); lastLine = line; } }
-      if (!run.autopilotRun) break;
+      if (!run.autopilotRun) { if (process.env.DEBUG) log("  ap ended; keys:", JSON.stringify(Object.keys(await sw.evaluate(() => chrome.storage.local.get(null))))); break; }
       await sleep(500);
     }
     await sleep(800);
@@ -306,6 +306,57 @@ try {
     ok = /3 cards/.test(popup || "") && state.cards.c1.currentPoints === 98765 && state.cards.c3.currentPoints === 45000 && state.cards.c2.currentCashBack === 123.45
       && offersOf("c1") === "Best Buy,Chipotle,Delta" && offersOf("c3") === "Hilton,Saks" && offersOf("c2") === "" && state.offers.every((o) => o.activated)
       && state.perks.find((x) => x.id === "p-uber").used && state.perks.find((x) => x.id === "p-dining").used && !state.perks.find((x) => x.id === "p-de").used;
+  } else if (scenario === "viewing") {
+    // Amex Gold and Amex Platinum on one site; the page shows Platinum in its top bar.
+    const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";
+    await sw.evaluate((path) => chrome.storage.local.set({
+      portalOverrides: Object.fromEntries(["c1", "c3", "c4", "c5"].map((id) => [id, { matchUrl: "http://localhost:3000/*", selector: path, source: "user-picker" }])),
+      rewardsPages: Object.fromEntries(["c1", "c3", "c4", "c5"].map((id) => [id, { url: "http://localhost:3000/bank/rewards", source: "user" }])),
+    }), path);
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.evaluate(() => { document.cookie = "acct=c4; path=/"; });
+    await bank.goto("http://localhost:3000/bank/rewards?opaqueAccountId=PLT04"); await sleep(3500);
+    const popup = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | "));
+    const chosen = await bank.evaluate(() => document.querySelector("#fins-prompt-root select")?.value);
+    log("popup:", popup, "| selected:", chosen);
+    await bank.screenshot({ path: `${SHOTS}/viewing-popup.png` });
+    // 1. Sync this page with the popup's default card.
+    await bank.click('#fins-prompt-root [data-act="sync"]');
+    const s1 = await waitFor((s) => s?.status === "synced" || s?.status === "error", "sync this page");
+    log("sync this page →", s1.cardId, s1.lastScrape?.value, "| points c3/c4:", state.cards.c3.currentPoints, state.cards.c4.currentPoints);
+    // 2. Read this tab for Gold while Platinum is on screen: follows the page's card.
+    await sw.evaluate(() => chrome.storage.local.set({ captureSession: null }));
+    await bank.bringToFront();
+    await panel.click('[data-act="toggle-card"][data-id="c3"]').catch(() => {});
+    await panel.click('[data-act="read-tab"][data-id="c3"]').catch(() => {});
+    const s2 = await waitFor((s) => s?.status === "synced" || s?.status === "error", "read this tab for Gold");
+    log("read this tab for Gold →", s2.cardId, "followed from:", s2.followedFrom, "| c3 still", state.cards.c3.currentPoints);
+    // 3. Autopilot for all three from the popup: starts with Platinum (on screen), selects the others.
+    await sw.evaluate(() => chrome.storage.local.set({ captureSession: null }));
+    await bank.reload(); await sleep(3500);
+    log("popup after reload:", await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | ").slice(0, 80)));
+    await bank.click('#fins-prompt-root [data-act="run"]');
+    for (let i = 0; i < 6; i++) { await sleep(500); log("  run state:", JSON.stringify((await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "captureSession"]))).autopilotRun), "| prompt status:", await bank.evaluate(() => document.querySelector("#fins-prompt-root .fins-prompt-status")?.innerText || "")); }
+    const end = Date.now() + 240000;
+    let run;
+    let trace = "";
+    while (Date.now() < end) {
+      run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot", "captureSession"]));
+      if (process.env.DEBUG) { const r = run.autopilotRun, c = run.captureSession; const line = `${r?.cardName} ${r?.step} | ${c?.cardId} ${c?.kind} ${c?.status} ${c?.lastError || ""} ${c?.currentUrl || ""} sw=${JSON.stringify(c?.switchResult || null)} other=${c?.shownOther || ""} ver=${c?.verified}`; if (line !== trace) { log("  ap:", line); trace = line; } }
+      if (!run.autopilotRun) break;
+      await sleep(500);
+    }
+    await sleep(800);
+    log("final note:", await note(bank), "| error:", (await sw.evaluate(() => chrome.storage.local.get("autopilotError"))).autopilotError || "none");
+    for (const id of ["c4", "c3", "c1", "c5"]) log(id, JSON.stringify(run.autopilot?.[id]?.results));
+    log("points c1/c3/c4/c5:", state.cards.c1.currentPoints, state.cards.c3.currentPoints, state.cards.c4.currentPoints, state.cards.c5.currentPoints);
+    const offersOf = (id) => state.offers.filter((o) => o.cardId === id).map((o) => o.merchant).sort().join(",");
+    log("offers c3:", offersOf("c3"), "| c4:", offersOf("c4"), "| c1:", offersOf("c1"));
+    ok = /viewing Amex Platinum Card/.test(popup || "") && /4 of your cards/.test(popup || "") && chosen === "c4" && s1.cardId === "c4" && s2.cardId === "c4" && s2.followedFrom === "Amex Gold Card"
+      && state.cards.c4.currentPoints === 150000 && state.cards.c3.currentPoints === 45000 && state.cards.c1.currentPoints === 98765
+      && offersOf("c3") === "Hilton,Saks" && offersOf("c4") === "Resy" && offersOf("c1") === "Best Buy,Chipotle,Delta"
+      && state.cards.c5.currentPoints === 0 && offersOf("c5") === "" && /Skipped/.test(await note(bank)); // Green isn't in the switcher: nothing saved for it
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

@@ -46,6 +46,7 @@
             <div class="fins-status-line">${busy ? '<span class="fins-prompt-spinner" aria-hidden="true"></span>' : ""}<strong>${esc(state.title)}</strong></div>
             ${state.value != null ? `<div class="fins-status-value is-${esc(state.kind)}">${esc(state.value)}</div>` : ""}
             ${state.text ? `<p class="fins-prompt-body">${esc(state.text)}</p>` : ""}
+            ${state.rows?.length ? `<dl class="fins-status-rows">${state.rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : ""}
             ${state.actions?.length ? `<div class="fins-prompt-actions">${state.actions.map(([action, label, primary]) => `<button type="button" class="fins-prompt-btn${primary ? " fins-prompt-primary" : ""}" data-action="${esc(action)}">${esc(label)}</button>`).join("")}</div>` : ""}`;
         if (state.autoHide) hideTimer = setTimeout(hide, state.autoHide);
     }

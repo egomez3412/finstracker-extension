@@ -760,5 +760,53 @@
         return rows.length >= 2 ? rows : []; // a single matching line is more likely noise than a list
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, readActivity, highlight, clearHighlight, suggestions, settle };
+
+    // Select a card in the site's own card/account switcher (portals that hold several cards, like
+    // Amex). words: the card's distinctive name words; others: the other cards' words (to recognise
+    // the switcher button, which shows the current card). Returns:
+    //   { ok: true, already } | { ok: true, clicked } | { ok: false, reason: "no-switcher" | "no-option" }
+    async function switchAccount(words, others) {
+        const want = (words || []).map((w) => String(w).toLowerCase()).filter(Boolean);
+        if (!want.length) return { ok: false, reason: "no-option" };
+        const otherSets = (others || []).map((ws) => ws.map((w) => String(w).toLowerCase())).filter((ws) => ws.length);
+        const OFFER = /(\$\s?\d+(?:[.,]\d{1,2})?\s*(?:cash\s*)?back|\d+(?:\.\d+)?\s*%\s*(?:cash\s*)?back|earn\s+[\d,]+)/i;
+        const text = (el) => `${el.innerText || el.textContent || ""} ${el.getAttribute("aria-label") || ""}`.toLowerCase().replace(/\s+/g, " ").trim();
+        const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2 && getComputedStyle(el).visibility !== "hidden"; };
+        const names = (t, ws) => ws.every((w) => t.includes(w));
+        const looksLikeAccount = (el, t) => /\.{3}\s*\d{4}|[•*x]{2,}\s*\d{4}|ending in|\bcard\b|account/i.test(t) || /option|menuitem|tab|radio/.test(el.getAttribute("role") || "") || el.closest("[role='listbox'], [role='menu'], [role='tablist'], [role='radiogroup']");
+        const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+        // Already selected: the switcher (or a selected option) shows this card.
+        const alreadySelected = () => [...document.querySelectorAll("[aria-haspopup], [aria-selected='true'], [aria-current='true'], [aria-current='page'], [aria-checked='true']")]
+            .some((el) => { const t = text(el); return shown(el) && t.length <= 90 && names(t, want) && !OFFER.test(t); });
+        const anySwitcher = () => [...document.querySelectorAll("[aria-haspopup], [role='listbox'], [role='tablist'], [role='option']")].some(shown)
+            || [...document.querySelectorAll("button, a")].some((el) => shown(el) && otherSets.some((ws) => names(text(el), ws)));
+        // Bank pages draw late: give the switcher a few seconds to appear.
+        for (let i = 0; i < 10 && !alreadySelected() && !anySwitcher(); i++) await pause(500);
+        if (alreadySelected()) return { ok: true, already: true };
+        const option = () => [...document.querySelectorAll("[role='option'], [role='menuitem'], [role='tab'], [role='radio'], li, button, a")]
+            .filter((el) => shown(el) && !el.closest("#fins-launcher-root, #fins-status-root, #fins-prompt-root"))
+            .map((el) => ({ el, t: text(el) }))
+            .filter(({ el, t }) => t.length <= 90 && names(t, want) && !OFFER.test(t) && looksLikeAccount(el, t))
+            .sort((a, b) => a.t.length - b.t.length)[0]?.el || null;
+        let target = option();
+        let opener = null;
+        if (!target) {
+            // Open the switcher: a popup button naming another card, or one labelled as a card/account picker.
+            opener = [...document.querySelectorAll("[aria-haspopup], [aria-expanded='false'], button")]
+                .filter((el) => shown(el))
+                .find((el) => { const t = text(el); return t.length <= 90 && !OFFER.test(t) && (otherSets.some((ws) => names(t, ws)) || /switch (card|account)|select (a )?(card|account)|change (card|account)|my accounts|all accounts/.test(t)); }) || null;
+            if (opener) {
+                opener.click();
+                await pause(700);
+                target = option();
+            }
+        }
+        if (!target) return { ok: false, reason: opener ? "no-option" : "no-switcher" };
+        // Click just after answering: many sites reload the page when the card changes.
+        setTimeout(() => target.click(), 50);
+        return { ok: true, clicked: true };
+    }
+
+    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, readActivity, highlight, clearHighlight, suggestions, settle, switchAccount };
 })();

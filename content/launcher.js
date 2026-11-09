@@ -79,7 +79,8 @@
                 <button type="button" class="item" data-act="pick">Pick the balance</button>
                 <button type="button" class="item" data-act="offers">Sync offers <small>adds them to the card</small></button>
                 <button type="button" class="item" data-act="benefits">Sync benefits</button>
-                <button type="button" class="item" data-act="autopilot">Run autopilot</button>
+                <button type="button" class="item" data-act="autopilot">Run autopilot <small>${cards.length > 1 ? "this card" : ""}</small></button>
+                ${cards.length > 1 ? `<button type="button" class="item" data-act="autopilot-all">Run autopilot for all ${cards.length} <small>cards on this site</small></button>` : ""}
                 <div class="sep"></div>` : ""}
             <button type="button" class="item" data-act="panel">Open Finstracker</button>
             <button type="button" class="item" data-act="hide">Hide on this site</button>
@@ -105,8 +106,12 @@
         if (name === "panel") { await send({ type: "openSidePanel" }); return toggle(false); }
         if (!card) return;
         // Offers, benefits and autopilot take a while: the page's status note shows their progress.
+        if (name === "autopilot-all") {
+            send({ type: "runAutopilot", cardIds: cards.map((c) => c.id), here: true });
+            return toggle(false);
+        }
         if (name === "offers" || name === "benefits" || name === "autopilot") {
-            send(name === "offers" ? { type: "syncOffers", card } : name === "benefits" ? { type: "syncBenefits", card } : { type: "runAutopilot", cardIds: [card.id] });
+            send(name === "offers" ? { type: "syncOffers", card } : name === "benefits" ? { type: "syncBenefits", card } : { type: "runAutopilot", cardIds: [card.id], here: true });
             return toggle(false);
         }
         message = "Working on it…";

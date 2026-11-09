@@ -52,3 +52,21 @@
 .fins-status .fins-prompt-body:last-child { margin-bottom: 0; }
 .fins-status .fins-prompt-actions { flex-wrap: wrap; }
 @media (prefers-color-scheme: dark) { .fins-status-value.is-ok { color: #5ccf98; } }
+/* "Just one card" row under Run autopilot */
+.fins-prompt-one { margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0e9da; }
+.fins-prompt-one .fins-prompt-actions .fins-prompt-btn { height: 30px; font-size: 13px; }
+.fins-prompt-label { display: grid; gap: 4px; margin-bottom: 8px; color: #4f5648; font-size: 12px; }
+.fins-prompt-label select { height: 30px; padding: 0 8px; border: 1px solid #e5e8e1; border-radius: 8px; background: #fff; color: #1a1f17; }
+.fins-prompt .fins-prompt-primary { flex: 1; }
+@media (prefers-color-scheme: dark) {
+    .fins-prompt-one { border-top-color: #3c4940; }
+    .fins-prompt-label { color: #aebcb2; }
+    .fins-prompt-label select { background: #2c3530; border-color: #3c4940; color: #eef4ee; }
+}
+/* Autopilot summary: one line per card */
+.fins-status-rows { display: block; margin: 0 0 10px; }
+.fins-status-rows div { padding: 7px 0; border-top: 1px solid #f0e9da; }
+.fins-status-rows div:first-child { border-top: 0; padding-top: 0; }
+.fins-status-rows dt { font-size: 13px; font-weight: 600; }
+.fins-status-rows dd { margin: 2px 0 0; color: #4f5648; font-size: 12px; }
+@media (prefers-color-scheme: dark) { .fins-status-rows div { border-top-color: #3c4940; } .fins-status-rows dd { color: #aebcb2; } }

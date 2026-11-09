@@ -31,7 +31,7 @@ try {
     const end = Date.now() + ms; let last = "";
     while (Date.now() < end) {
       const s = await session();
-      const line = s ? `${s.status} | ${s.statusLabel || ""} | ${s.lastError || ""}` : "none";
+      const line = s ? `${s.status} | ${s.statusLabel || ""} | ${s.lastError || ""}${process.env.DEBUG ? ` | ${s.cardId} ${JSON.stringify(s.switchResult || null)} ${s.currentUrl || ""}` : ""}` : "none";
       if (line !== last) { log("  session:", line); last = line; }
       if (await pred(s)) return s;
       await sleep(400);
@@ -267,6 +267,45 @@ try {
     await bank.screenshot({ path: `${SHOTS}/quicktab-left.png` });
     log("next page: quick tab", again, "| prompt", prompt);
     ok = hasTab && launcherPos?.side === "left" && s.pending?.value === 98765 && again && !prompt;
+  } else if (scenario === "portal") {
+    // Three cards on one site. The popup offers autopilot for all of them; it selects each card in
+    // the site's switcher, reads its balance, adds and saves its offers, checks its benefits. Blue
+    // Cash isn't in the switcher: its balance is read, its offers and benefits are skipped.
+    await sw.evaluate(() => chrome.storage.local.set({
+      portalOverrides: {
+        c1: { matchUrl: "http://localhost:3000/*", selector: "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)", source: "user-picker" },
+        c3: { matchUrl: "http://localhost:3000/*", selector: "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)", source: "user-picker" },
+        c2: { matchUrl: "http://localhost:3000/*", selector: "#root > div.tile:nth-of-type(3) > div:nth-of-type(5)", source: "user-picker" },
+      },
+      rewardsPages: Object.fromEntries(["c1", "c2", "c3"].map((id) => [id, { url: "http://localhost:3000/bank/rewards", source: "user" }])),
+    }));
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/rewards"); await sleep(2500);
+    const popup = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | "));
+    log("popup:", popup);
+    await bank.screenshot({ path: `${SHOTS}/portal-popup.png` });
+    await bank.click('#fins-prompt-root [data-act="run"]');
+    let run;
+    const end = Date.now() + 240000;
+    await sleep(2000);
+    let lastLine = "";
+    while (Date.now() < end) {
+      run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot", "captureSession"]));
+      if (process.env.DEBUG) { const c = run.captureSession; const line = c ? `${c.cardId} ${c.kind} ${c.status} ${JSON.stringify(c.switchResult || null)} ${c.currentUrl || ""}` : "none"; if (line !== lastLine) { log("  ", line); lastLine = line; } }
+      if (!run.autopilotRun) break;
+      await sleep(500);
+    }
+    await sleep(800);
+    await bank.screenshot({ path: `${SHOTS}/portal-done.png` });
+    for (const id of ["c1", "c2", "c3"]) log(id, JSON.stringify(run.autopilot?.[id]?.results));
+    log("balances:", state.cards.c1.currentPoints, state.cards.c3.currentPoints, state.cards.c2.currentCashBack);
+    log("offers:", JSON.stringify(state.offers.map((o) => [o.cardId, o.merchant, o.activated])));
+    log("perks:", JSON.stringify(state.perks.map((x) => [x.id, x.used])), "| tabs:", ctx.pages().length, "| note:", await note(bank));
+    const offersOf = (id) => state.offers.filter((o) => o.cardId === id).map((o) => o.merchant).sort().join(",");
+    ok = /3 cards/.test(popup || "") && state.cards.c1.currentPoints === 98765 && state.cards.c3.currentPoints === 45000 && state.cards.c2.currentCashBack === 123.45
+      && offersOf("c1") === "Best Buy,Chipotle,Delta" && offersOf("c3") === "Hilton,Saks" && offersOf("c2") === "" && state.offers.every((o) => o.activated)
+      && state.perks.find((x) => x.id === "p-uber").used && state.perks.find((x) => x.id === "p-dining").used && !state.perks.find((x) => x.id === "p-de").used;
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

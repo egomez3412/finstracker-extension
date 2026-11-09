@@ -235,6 +235,38 @@ try {
     await sleep(300);
     await panel.screenshot({ path: `${SHOTS}/autopilot-card.png` });
     ok = state.points === 98765 && state.offers.length === 3 && state.perks.find((x) => x.id === "p-uber").used && /Balance/.test(results?.balance || "") && /offers saved/.test(results?.offers || "");
+  } else if (scenario === "quicktab") {
+    // Close the prompt → a Finstracker tab stays on the edge. Drag it, click it, sync from its menu.
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/rewards"); await sleep(2500);
+    await bank.click('#fins-prompt-root .fins-prompt-close');
+    await sleep(800);
+    const hasTab = await bank.evaluate(() => Boolean(document.getElementById("fins-launcher-root")));
+    await bank.screenshot({ path: `${SHOTS}/quicktab-right.png` });
+    // Drag from the right edge (default spot, 62% down) to the left edge.
+    const startY = Math.round(760 * 0.62) + 23;
+    await bank.mouse.move(1085, startY); await bank.mouse.down();
+    for (let i = 1; i <= 10; i++) await bank.mouse.move(1085 - i * 100, startY - i * 25);
+    await bank.mouse.move(30, 230); await bank.mouse.up();
+    await sleep(400);
+    const { launcherPos } = await sw.evaluate(() => chrome.storage.local.get("launcherPos"));
+    log("tab after closing the prompt:", hasTab, "| dragged to:", JSON.stringify(launcherPos));
+    // Click it (no drag) to open the menu, then the first item: Sync points.
+    await bank.mouse.click(18, 230);
+    await sleep(400);
+    await bank.screenshot({ path: `${SHOTS}/quicktab-menu.png` });
+    await bank.keyboard.press("Enter");
+    const s = await waitFor((s) => s?.status === "confirm", "sync from the quick tab");
+    log("sync from the quick tab:", s.status, s.pending?.value);
+    // Another page on the site: the tab is back, on the left.
+    await sw.evaluate(() => chrome.storage.local.set({ captureSession: null }));
+    await bank.goto("http://localhost:3000/bank/dashboard"); await sleep(2500);
+    const again = await bank.evaluate(() => Boolean(document.getElementById("fins-launcher-root")));
+    const prompt = await bank.evaluate(() => Boolean(document.getElementById("fins-prompt-root")));
+    await bank.screenshot({ path: `${SHOTS}/quicktab-left.png` });
+    log("next page: quick tab", again, "| prompt", prompt);
+    ok = hasTab && launcherPos?.side === "left" && s.pending?.value === 98765 && again && !prompt;
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

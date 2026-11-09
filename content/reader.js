@@ -11,6 +11,36 @@
     // reward words. hints = { keywords, cardWords } for the card being synced.
     function extract(selectorList, regexStr, unitHint, hints) {
         lastScan = [];
+        // Never a balance: anything in the page footer or legal text, phone numbers, years and dates
+        // ("© 2026", "Member since 2015", "Nov 8, 2026", "1-800-528-4800").
+        const LEGAL = /©|\(c\)\s*\d{4}|copyright|all rights reserved|member fdic|equal housing|nmls|terms (and|&) conditions|privacy (policy|statement)/i;
+        const PHONE = /\b1[-.\s]?\d{3}[-.\s]\d{3}[-.\s]\d{4}\b|\(\d{3}\)\s*\d{3}[-.\s]\d{4}|\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/;
+        const MONTH_DATE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+(19|20)\d{2}\b|\b\d{1,2}[/.-]\d{1,2}[/.-](19|20)?\d{2}\b|\b(19|20)\d{2}-\d{2}-\d{2}\b/i;
+        const SINCE = /\b(since|member since|established|est\.?|founded|as of|updated|in)\s+(19|20)\d{2}\b/i;
+        const UNIT_AFTER = /^\s*(pts?|points?|miles?|reward dollars|cash ?back)\b/i;
+        function inFooter(el) {
+            let node = el;
+            for (let d = 0; d < 14 && node; d++) {
+                if (node.nodeType === 1) {
+                    if (node.tagName === "FOOTER" || node.getAttribute("role") === "contentinfo") return true;
+                    const tag = `${node.id || ""} ${typeof node.className === "string" ? node.className : ""}`;
+                    if (/footer|legal|copyright|disclos|disclaimer/i.test(tag)) return true;
+                }
+                node = node.parentElement || (node.parentNode && node.parentNode.host) || null;
+            }
+            return false;
+        }
+        // Legal text and phone numbers rule out the whole element; dates are cut out of the text, so
+        // "98,765 points as of Nov 8, 2026" still reads 98,765.
+        const noisyText = (t) => LEGAL.test(t) || PHONE.test(t);
+        const DATE_G = new RegExp(MONTH_DATE.source, "gi"), SINCE_G = new RegExp(SINCE.source, "gi");
+        const stripDates = (t) => t.replace(DATE_G, " ").replace(SINCE_G, " ").replace(/\s+/g, " ").trim();
+        // A bare year ("2026") unless a unit follows it ("2026 points"); "2,026" has a comma and is fine.
+        function yearOnly(raw, txt) {
+            if (!/^(19[5-9]\d|20\d{2})$/.test(raw)) return false;
+            const at = txt.indexOf(raw);
+            return !UNIT_AFTER.test(txt.slice(at + raw.length, at + raw.length + 20));
+        }
         const KEYWORDS = [
             "membership rewards", "ultimate rewards", "thankyou points",
             "miles", "points", "rewards balance", "rewards", "cash back",
@@ -136,6 +166,10 @@
                 const txt = pickText(n);
                 if (!txt) continue;
                 if (unitHint === "points" && /[$€£]\s*-?\d/.test(txt)) continue; // a dollar amount is not points
+                if (inFooter(n) || noisyText(txt)) continue;
+                const clean = stripDates(txt);
+                const first = (clean.match(/-?\d[\d,]*(?:\.\d+)?/) || [""])[0];
+                if (!first || yearOnly(first, clean)) continue;
                 if (regexStr) {
                     try {
                         const rx = new RegExp(regexStr);
@@ -150,10 +184,10 @@
                             };
                         }
                     } catch { /* fall through */ }
-                } else if (/\d/.test(txt)) {
+                } else if (/\d/.test(clean)) {
                     lastFound = n;
                     return {
-                        text: txt,
+                        text: clean,
                         html: n.outerHTML.slice(0, 400),
                         selector: sel,
                         via: "selector",
@@ -206,13 +240,15 @@
                 walk = nextWalk;
             }
             if (inExcluded) continue;
+            if (inFooter(el) || noisyText(txt)) continue;
 
-            const nums = txt.match(NUMERIC_RX) || [];
+            const nums = stripDates(txt).match(NUMERIC_RX) || [];
             if (!nums.length) continue;
 
             for (const raw of nums) {
                 const n = Number(raw.replace(/,/g, ""));
                 if (!Number.isFinite(n)) continue;
+                if (yearOnly(raw, txt)) continue;
                 if (unitHint === "points") {
                     if (n < 10 || n > 50_000_000) continue;     // points usually 10..50M
                 } else if (unitHint === "cashback") {

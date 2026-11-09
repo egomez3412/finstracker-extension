@@ -69,7 +69,7 @@ Each step also has its own button on the card: **Update points/cash back**, **Sy
 1. **Update points** uses a tab that is already on the card's site. Otherwise it opens the page where the balance was found last time, or the sign-in page of the site that holds the points. Co-branded cards go to the airline or hotel (Delta, United, Southwest, American, Alaska, JetBlue, Aeroplan, British Airways, Flying Blue, Marriott, Hilton, Hyatt, IHG, Wyndham, Choice, Amazon, Bilt); other cards go to their bank (Amex, Chase, Capital One, Citi, Discover, Wells Fargo, Bank of America, U.S. Bank, Barclays). **Read this tab** does the same on the tab you are looking at.
 2. A small Finstracker note on the page says what is happening. On a sign-in or verification page it waits for you; passwords, passkeys and codes are yours to enter.
 3. Once you are in, it reads the page. No balance there → it opens the card's rewards page, then follows the site's own rewards links ("Ultimate Rewards", "SkyMiles", "View rewards"), up to three steps, on the same site only.
-4. It prefers numbers next to the card's name and program, so a page listing several cards gives each card its own number. Dollar amounts, statement balances and masked account numbers are skipped.
+4. It prefers numbers next to the card's name and program, so a page listing several cards gives each card its own number. Dollar amounts, statement balances and masked account numbers are skipped, and so is anything in the page footer or legal text (© 2026, "All rights reserved"), phone numbers, dates ("Nov 8, 2026", "Member since 2015") and bare years. "2,026 points" is still a balance. A final check runs before anything is saved, and the picker refuses these too.
 5. The first time, the number is highlighted and the note asks **Is this your balance?** (also shown in the side panel). **Use it** posts the difference to Finstracker; **Pick another** lets you click the right number. That spot is then trusted, and later syncs post without asking.
 
 **Pick the balance** walks you through it. From any tab, it takes you to the card's site and opens the picker once you have signed in. Step 1 lists the likeliest numbers (numbered on the page too); click one, press its number key, or click the balance itself. Hovering shows the number that would be picked. Step 2 asks "Use 98,765 for Sapphire Preferred?". **Not on this page** opens the card's rewards page and the picker comes back there.
@@ -128,6 +128,7 @@ npm run e2e -- portal    # three cards on one site with a card switcher, autopil
 npm run e2e -- viewing   # the page shows Platinum: popup, Sync this page, Read this tab and autopilot follow it
 npm run e2e -- addall    # Amex-style offers: new formats, redrawn list, Load more, a lost click; all 8 added
 npm run e2e -- amexbenefits # benefits behind "View details"; each benefit reported with what happened
+npm run e2e -- noise     # © 2026, phone numbers, dates: never read or picked as a balance
 ```
 
 ## Security model

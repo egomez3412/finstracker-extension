@@ -22,3 +22,18 @@ test("cash back is compared in cents without float drift", () => {
     assert.equal(c.amount, 0.2);
     assert.equal(c.unit, "cashback");
 });
+
+test("copyright years, dates and phone numbers are never balances", async () => {
+    const { noiseReason } = await import("../lib/parse.js");
+    assert.equal(noiseReason("© 2026 American Express. All rights reserved.", 2026), "copyright or legal text");
+    assert.equal(noiseReason("Copyright 2026", 2026), "copyright or legal text");
+    assert.equal(noiseReason("2026", 2026), "a year");
+    assert.equal(noiseReason("Member since 2015", 2015), "a date");
+    assert.equal(noiseReason("Statement closes Nov 8, 2026", 8), "a date");
+    assert.equal(noiseReason("11/08/2026", 11), "a date");
+    assert.equal(noiseReason("Call 1-800-528-4800", 1), "a phone number");
+    assert.equal(noiseReason("2,026 points", 2026), null);
+    assert.equal(noiseReason("2026 points", 2026), null);
+    assert.equal(noiseReason("98,765", 98765), null);
+    assert.equal(noiseReason("$123.45", 123.45), null);
+});

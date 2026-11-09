@@ -388,6 +388,29 @@ try {
     await bank.screenshot({ path: `${SHOTS}/amex-benefits.png` });
     const used = (id) => state.perks.find((x) => x.id === id).used;
     ok = s.status === "synced" && used("p-uber") && used("p-saks") && !used("p-de") && (s.rows || []).length === 4 && /no matching credit/.test(JSON.stringify(s.rows));
+  } else if (scenario === "noise") {
+    // A page whose only numbers are a copyright year, a phone number, "Member since 2015" and a date:
+    // none of them may be read as the balance, by the reader or by the picker.
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/no-balance"); await sleep(2000); await bank.bringToFront();
+    // 1. The picker refuses them. (The card row is already open.)
+    await panel.click('[data-act="pick"][data-id="c1"]');
+    await waitFor((s) => s?.status === "picking", "picker");
+    await sleep(800);
+    for (const text of ["© 2026 Mock Bank, N.A.", "Member since 2015", "Questions? Call 1-800-528-4800"]) { await bank.locator(`text=${text}`).first().click(); await sleep(300); await bank.keyboard.press("Enter"); await sleep(300); }
+    await bank.screenshot({ path: `${SHOTS}/noise-picker.png` });
+    const afterPick = await session();
+    log("after picking copyright, a year and a phone number:", afterPick?.status, "| transactions:", state.transactions.length);
+    await bank.keyboard.press("Escape"); await sleep(300); await bank.keyboard.press("Escape");
+    await sw.evaluate(() => chrome.storage.local.set({ captureSession: null }));
+    // 2. Read this tab: finds nothing here, goes on to the rewards page, offers the real balance.
+    await bank.reload(); await sleep(2000); await bank.bringToFront();
+    await panel.click('[data-act="read-tab"][data-id="c1"]');
+    const s = await waitFor((s) => s?.status === "confirm" || s?.status === "error" || s?.status === "synced", "read", 60000);
+    log("read this tab →", s.status, s.pending?.value ?? s.lastScrape?.value ?? s.lastError, "on", s.currentUrl);
+    const bad = [2026, 2015, 1, 800, 528, 4800, 8, 1026];
+    ok = afterPick?.status === "picking" && state.transactions.length === 0 && s.status === "confirm" && s.pending?.value === 98765 && !bad.includes(s.pending?.value);
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

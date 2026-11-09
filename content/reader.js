@@ -5,10 +5,12 @@
 (function () {
     if (window.__finsReader) return;
     let lastFound = null; // element of the last balance found, for highlight()
+    let lastScan = []; // scored candidates from the last scan, for suggestions()
 
     // Finds the rewards balance: the configured selectors first, then a scored scan of numbers near
     // reward words. hints = { keywords, cardWords } for the card being synced.
     function extract(selectorList, regexStr, unitHint, hints) {
+        lastScan = [];
         const KEYWORDS = [
             "membership rewards", "ultimate rewards", "thankyou points",
             "miles", "points", "rewards balance", "rewards", "cash back",
@@ -318,6 +320,7 @@
         }
 
         candidates.sort((a, b) => b.score - a.score || b.n - a.n);
+        lastScan = candidates.slice(0, 20);
         // On pages listing several cards, keep to the numbers closest to this card's name.
         // Depth 0 means the number sits in the card's own label ("Sapphire (...9876)"), not a balance.
         const named = candidates.filter((c) => c.cardDepth >= 1 && c.score >= 8);
@@ -599,5 +602,47 @@
         if (box) { clearInterval(box.__finsTimer); box.remove(); }
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, highlight, clearHighlight };
+    // The likeliest balances on the page, for the picker to suggest: [{ el, text, n, label }].
+    function suggestions(unitHint, hints, limit = 3) {
+        extract(null, null, unitHint, hints);
+        const seen = new Set();
+        const out = [];
+        for (const c of lastScan) {
+            if (c.score < 4 || seen.has(c.n) || !c.el.isConnected) continue;
+            // Not masked card numbers ("...9876") or whole blocks of text.
+            if (/\.{3}\s*\d{4}|ending in|[•*x]{2,}\s*\d{4}/i.test(c.txt) || c.txt.length > 40) continue;
+            seen.add(c.n);
+            out.push({ el: c.el, text: c.raw, n: c.n, label: labelFor(c.el) });
+            if (out.length >= limit) break;
+        }
+        return out;
+    }
+
+    // A short label for a number: the nearest text before it ("Ultimate Rewards", "Cash back").
+    function labelFor(el) {
+        let node = el;
+        for (let d = 0; d < 4 && node; d++) {
+            let prev = node.previousElementSibling;
+            while (prev) {
+                const t = (prev.innerText || prev.textContent || "").replace(/\s+/g, " ").trim();
+                if (t && /[a-z]/i.test(t) && t.length <= 40 && !/^[\d\s,.$]+$/.test(t)) return t;
+                prev = prev.previousElementSibling;
+            }
+            node = node.parentElement;
+        }
+        return "";
+    }
+
+    // Resolves once the page has stopped changing for quietMs (or after maxMs).
+    function settle(quietMs = 800, maxMs = 6000) {
+        return new Promise((resolve) => {
+            let timer = setTimeout(done, quietMs);
+            const stop = setTimeout(done, maxMs);
+            const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, quietMs); });
+            observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+            function done() { observer.disconnect(); clearTimeout(timer); clearTimeout(stop); resolve(true); }
+        });
+    }
+
+    window.__finsReader = { extract, watch, signInShown, findRewardsLink, highlight, clearHighlight, suggestions, settle };
 })();

@@ -441,10 +441,14 @@ const actions = {
     async pick(el) {
         const card = cardById(el.dataset.id);
         const tab = await activeTab();
-        if (!tab?.id || !/^https?:/.test(tab.url || "")) return setRowState(card.id, "error", "Open the card's rewards page first");
-        if (!(await ensureSiteAccess(tab.url))) return setRowState(card.id, "error", `Allow access to ${hostOf(tab.url)} to pick on it`);
-        const r = await send({ type: "startPickerForCard", card, tabId: tab.id });
-        if (!r.ok) setRowState(card.id, "error", r.error || "Couldn't start the picker");
+        setRowState(card.id, "syncing", "Opening the picker…");
+        let r = await send({ type: "pickBalance", card, tabId: tab?.id });
+        if (!r.ok && /access|cannot|permission/i.test(r.error || "") && tab?.url && (await ensureSiteAccess(tab.url))) {
+            r = await send({ type: "pickBalance", card, tabId: tab.id });
+        }
+        if (!r.ok) return setRowState(card.id, "error", r.error || "Couldn't open the picker");
+        state.rowState.delete(card.id); // the status area follows the picking from here
+        render();
     },
     async "use-tab"(el) {
         const card = cardById(el.dataset.id);

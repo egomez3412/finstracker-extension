@@ -1,88 +1,33 @@
-/* extension/content/picker.css — visual overlay for the element picker.
- * Uses Fins palette tokens (charcoal + warm gold) so the HUD reads as part
- * of the same product when injected into a third-party portal page.
- *
- * Notes:
- *  - The highlight uses `box-shadow` + `outline` because some portals wrap
- *    rewards numbers in containers with `overflow: hidden` that clip plain
- *    outlines. `box-shadow` is not clipped.
- *  - The HUD uses the maximum z-index so it always sits above modals.
- */
-/* Picker visuals are scoped under `html.fins-picker-on` so they only render
- * while the picker is actively running. If a previous session leaves a stale
- * `.fins-picker-hover` or `.fins-picker-locked` class on an element (e.g. the
- * page was navigated mid-pick, or cleanup raced with a SPA route change), the
- * 9999px inset box-shadow would otherwise paint a giant dark veil over the
- * whole page on every subsequent visit. Scoping by `html.fins-picker-on`
- * guarantees the veil disappears the moment cleanup removes the root class.
- */
+/* Balance picker decorations on the page. Scoped to html.fins-picker-on so nothing lingers after
+ * the picker closes. Outlines (not fills) keep the number readable. */
+html.fins-picker-on, html.fins-picker-on * { cursor: crosshair !important; }
 html.fins-picker-on .fins-picker-hover {
-    outline: 2px solid #1d6b4a !important;
-    outline-offset: 2px !important;
-    box-shadow: 0 0 0 9999px rgba(26, 31, 23, 0.08) inset, 0 0 0 2px #1d6b4a !important;
-    cursor: crosshair !important;
-    transition: none !important;
+    outline: 2px solid #087487 !important;
+    outline-offset: 3px !important;
+    border-radius: 4px !important;
+}
+html.fins-picker-on .fins-picker-suggested {
+    outline: 2px dashed #1d6b4a !important;
+    outline-offset: 3px !important;
+    border-radius: 4px !important;
 }
 html.fins-picker-on .fins-picker-locked {
-    outline: 3px solid #087487 !important;
-    outline-offset: 2px !important;
-    box-shadow: 0 0 0 9999px rgba(26, 31, 23, 0.12) inset, 0 0 0 3px #087487 !important;
+    outline: 3px solid #1d6b4a !important;
+    outline-offset: 3px !important;
+    border-radius: 4px !important;
+    box-shadow: 0 0 0 7px rgba(29, 107, 74, 0.18) !important;
 }
-* { /* keep cursor consistent while picker is active */ }
-html.fins-picker-on, html.fins-picker-on * { cursor: crosshair !important; }
-
-.fins-picker-hud {
+.fins-picker-badge {
     position: fixed;
-    top: 12px;
-    left: 12px;
-    z-index: 2147483647;
-    background: #ffffff;
-    color: #1a1f17;
-    padding: 10px 12px;
-    border: 1px solid #e5e8e1;
-    border-left: 3px solid #1d6b4a;
-    border-radius: 10px;
-    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    max-width: 380px;
-    box-shadow: 0 8px 28px rgba(26, 31, 23, 0.16);
-    pointer-events: auto;
-}
-.fins-picker-hud strong { color: #1d6b4a; }
-.fins-picker-hud .fins-row { margin-top: 8px; display: flex; gap: 6px; }
-.fins-picker-hud button {
-    background: #ffffff;
-    color: #1a1f17;
-    border: 1px solid #e5e8e1;
-    border-radius: 8px;
-    padding: 4px 10px;
-    cursor: pointer;
-    font: inherit;
-    font-weight: 500;
-}
-.fins-picker-hud button:hover { background: #f3f4f0; }
-.fins-picker-hud button.primary {
+    z-index: 2147483646;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
     background: #1d6b4a;
-    color: #ffffff;
-    border-color: #1d6b4a;
+    color: #fff;
+    font: 600 12px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    box-shadow: 0 1px 3px rgba(26, 31, 23, 0.3);
+    pointer-events: none;
 }
-.fins-picker-hud button.primary:hover { background: #144f37; border-color: #144f37; }
-.fins-picker-hud .fins-url {
-    color: #4f5648;
-    font-size: 11px;
-    word-break: break-all;
-    margin-top: 4px;
-}
-.fins-picker-hud .fins-preview {
-    margin-top: 6px;
-    padding: 6px 8px;
-    background: #f7f7f4;
-    border: 1px solid #e5e8e1;
-    border-radius: 6px;
-    font-size: 12px;
-    max-height: 64px;
-    overflow: hidden;
-    word-break: break-word;
-}
-.fins-picker-hud .fins-preview b { color: #1d6b4a; }
-.fins-picker-hud .fins-preview .fins-num { color: #1d6b4a; font-weight: 600; }
-.fins-picker-hud .fins-preview .fins-empty { color: #4f5648; font-style: italic; }

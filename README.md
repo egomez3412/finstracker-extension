@@ -50,6 +50,8 @@ To update: `git pull`, then click **Reload** on the extension in `chrome://exten
 4. It prefers numbers next to the card's name and program, so a page listing several cards gives each card its own number. Dollar amounts, statement balances and masked account numbers are skipped.
 5. The first time, the number is highlighted and the note asks **Is this your balance?** (also shown in the side panel). **Use it** posts the difference to Finstracker; **Pick another** lets you click the right number. That spot is then trusted, and later syncs post without asking.
 
+**Pick the balance** walks you through it. From any tab, it takes you to the card's site and opens the picker once you have signed in. Step 1 lists the likeliest numbers (numbered on the page too); click one, press its number key, or click the balance itself. Hovering shows the number that would be picked. Step 2 asks "Use 98,765 for Sapphire Preferred?". **Not on this page** opens the card's rewards page and the picker comes back there.
+
 **Use this tab** makes the open page a card's rewards page. Pages and spots are remembered per card; **Settings › Rewards pages › Reset** forgets them.
 
 ## Code layout
@@ -91,6 +93,7 @@ npm install && npx playwright install chromium
 npm run e2e -- update
 npm run e2e -- existing
 npm run e2e -- picker
+npm run e2e -- guided
 ```
 
 ## Security model

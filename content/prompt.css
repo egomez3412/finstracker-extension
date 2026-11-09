@@ -1,110 +1,46 @@
-/* extension/content/prompt.css — floating sync prompt injected on portals. */
-
-.fins-prompt {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 2147483646;
-    width: 320px;
-    max-width: calc(100vw - 24px);
-    background: #161a1f;
-    color: #f3eddc;
-    border: 1px solid #3a414c;
-    border-left: 3px solid #2f8568;
-    border-radius: 12px;
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    font-size: 13px;
-    line-height: 1.45;
-    padding: 14px 14px 12px;
-    transform: translateY(20px);
-    opacity: 0;
-    transition: transform 0.25s ease, opacity 0.25s ease;
-    pointer-events: auto;
+/* Sync prompt on issuer portals and the best-card note at checkout (shared look). */
+.fins-prompt, .fins-checkout {
+    all: initial;
+    position: fixed; right: 20px; bottom: 20px; z-index: 2147483646;
+    display: block; box-sizing: border-box; width: 300px; max-width: calc(100vw - 24px);
+    padding: 14px 16px; border-radius: 12px; background: #ffffff; color: #1a1f17;
+    box-shadow: 0 12px 32px rgba(26, 31, 23, 0.16), 0 2px 6px rgba(26, 31, 23, 0.08);
+    font: 400 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    opacity: 0; transform: translateY(12px); transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.fins-prompt.fins-show { transform: translateY(0); opacity: 1; }
-
-.fins-prompt-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
+.fins-prompt *, .fins-checkout * { box-sizing: border-box; font: inherit; color: inherit; }
+.fins-prompt.fins-show, .fins-checkout.fins-show { opacity: 1; transform: none; }
+.fins-prompt-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fins-prompt-head img { border-radius: 5px; }
+.fins-prompt-title { flex: 1; font-size: 14px; font-weight: 500; }
+.fins-prompt-close { all: unset; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: #4f5648; font-size: 18px; line-height: 1; cursor: pointer; }
+.fins-prompt-close:hover { background: #f3f4f0; color: #1a1f17; }
+.fins-prompt-body { margin: 0 0 10px; color: #4f5648; }
+.fins-prompt-body strong { color: #1a1f17; font-weight: 600; }
+.fins-prompt-body label { display: grid; gap: 6px; }
+.fins-prompt-body select { height: 32px; padding: 0 8px; border: 1px solid #e5e8e1; border-radius: 8px; background: #fff; color: #1a1f17; }
+.fins-prompt-actions { display: flex; gap: 6px; }
+.fins-prompt-btn { all: unset; flex: 1; box-sizing: border-box; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; border: 1px solid #e5e8e1; border-radius: 8px; background: #fff; color: #1a1f17; font-weight: 500; font-size: 14px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.fins-prompt-btn:hover { border-color: #c4bba6; }
+.fins-prompt-primary { border-color: #1d6b4a; background: #1d6b4a; color: #fff; }
+.fins-prompt-primary:hover { background: #144f37; border-color: #144f37; }
+.fins-prompt-btn:disabled { opacity: 0.55; cursor: default; }
+.fins-prompt-btn:focus-visible, .fins-prompt-close:focus-visible { outline: 2px solid #087487; outline-offset: 2px; }
+.fins-prompt-status { display: flex; align-items: center; gap: 8px; min-height: 0; margin: 8px 0 0; font-size: 12px; color: #4f5648; }
+.fins-prompt-status:empty { display: none; }
+.fins-prompt-status.is-ok { color: #168b5c; }
+.fins-prompt-status.is-error { color: #a32424; }
+.fins-prompt-spinner { width: 12px; height: 12px; border: 2px solid #e5e8e1; border-top-color: #087487; border-radius: 50%; animation: fins-spin 0.8s linear infinite; }
+@keyframes fins-spin { to { transform: rotate(360deg); } }
+@media (prefers-color-scheme: dark) {
+    .fins-prompt, .fins-checkout { background: #222a26; color: #eef4ee; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
+    .fins-prompt-body, .fins-prompt-close, .fins-prompt-status { color: #aebcb2; }
+    .fins-prompt-body strong { color: #eef4ee; }
+    .fins-prompt-btn, .fins-prompt-body select { background: #2c3530; border-color: #3c4940; color: #eef4ee; }
+    .fins-prompt-close:hover { background: #2c3530; color: #eef4ee; }
+    .fins-prompt-primary { background: #2f8a62; border-color: #2f8a62; color: #fff; }
 }
-.fins-prompt-mark {
-    width: 30px; height: 30px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.06);
-    display: grid; place-items: center;
-    flex-shrink: 0;
-    overflow: hidden;
-}
-.fins-prompt-mark img { display: block; width: 22px; height: 22px; object-fit: contain; }
-.fins-prompt-mark svg { display: block; }
-.fins-prompt-title { font-weight: 600; font-size: 13px; color: #f3eddc; flex: 1; }
-.fins-prompt-close {
-    background: transparent;
-    color: #b9b1a0;
-    border: 0;
-    cursor: pointer;
-    font-size: 16px;
-    line-height: 1;
-    padding: 4px 6px;
-    border-radius: 6px;
-}
-.fins-prompt-close:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
-
-.fins-prompt-body { color: #b9b1a0; margin: 0 0 10px; }
-.fins-prompt-body strong { color: #f3eddc; }
-
-.fins-prompt-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-.fins-prompt-btn {
-    flex: 1;
-    min-width: 0;
-    padding: 7px 10px;
-    border-radius: 8px;
-    font-size: 12.5px;
-    font-weight: 600;
-    cursor: pointer;
-    border: 0;
-    font-family: inherit;
-    transition: background 0.15s, transform 0.05s;
-}
-.fins-prompt-btn-primary { background: #d4a64a; color: #161a1f; }
-.fins-prompt-btn-primary:hover { background: #b8862c; }
-.fins-prompt-btn-secondary {
-    background: #2a313b;
-    color: #f3eddc;
-    border: 1px solid #3a414c;
-}
-.fins-prompt-btn-secondary:hover { background: #353d49; }
-.fins-prompt-btn:active { transform: translateY(1px); }
-.fins-prompt-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.fins-prompt-status {
-    margin: 8px 0 0;
-    font-size: 12px;
-    color: #b9b1a0;
-    min-height: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.fins-prompt-status.is-success { color: #4cc391; }
-.fins-prompt-status.is-error { color: #d96a6a; }
-
-.fins-prompt-spinner {
-    width: 12px; height: 12px;
-    border: 2px solid rgba(255,255,255,0.25);
-    border-top-color: #f3eddc;
-    border-radius: 50%;
-    animation: fins-prompt-spin 0.85s linear infinite;
-}
-@keyframes fins-prompt-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
+    .fins-prompt, .fins-checkout { transition: none; }
     .fins-prompt-spinner { animation: none; }
-    .fins-prompt { transition: none; }
 }

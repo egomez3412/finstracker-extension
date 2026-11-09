@@ -114,47 +114,47 @@
                 .hud {
                     position: fixed; top: 12px; left: 12px;
                     max-width: 420px; min-width: 320px;
-                    background: #1f242c; color: #f3eddc;
+                    background: #ffffff; color: #1a1f17;
                     padding: 12px 14px;
-                    border: 1px solid #3a414c;
-                    border-left: 3px solid #d4a64a;
+                    border: 1px solid #e5e8e1;
+                    border-left: 3px solid #1d6b4a;
                     border-radius: 10px;
                     font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-                    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+                    box-shadow: 0 8px 28px rgba(26, 31, 23, 0.16);
                     pointer-events: auto;
                 }
-                .hud b, .hud strong { color: #d4a64a; }
+                .hud b, .hud strong { color: #1d6b4a; }
                 .row { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-                .status { margin-top: 6px; font-size: 11px; color: #b9b1a0; }
+                .status { margin-top: 6px; font-size: 11px; color: #4f5648; }
                 button {
-                    background: #2a313b; color: #f3eddc;
-                    border: 1px solid #3a414c;
+                    background: #ffffff; color: #1a1f17;
+                    border: 1px solid #e5e8e1;
                     border-radius: 8px;
                     padding: 6px 12px;
                     cursor: pointer;
                     font: inherit; font-weight: 600;
                 }
-                button:hover { background: #353d49; }
-                button.primary { background: #d4a64a; color: #161a1f; border-color: #d4a64a; }
-                button.primary:hover { background: #b8862c; border-color: #b8862c; }
+                button:hover { background: #f3f4f0; }
+                button.primary { background: #1d6b4a; color: #ffffff; border-color: #1d6b4a; }
+                button.primary:hover { background: #144f37; border-color: #144f37; }
                 button:disabled { opacity: 0.55; cursor: not-allowed; }
                 .preview {
                     margin-top: 8px; padding: 8px 10px;
-                    background: #161a1f; border: 1px solid #3a414c;
+                    background: #f7f7f4; border: 1px solid #e5e8e1;
                     border-radius: 6px; font-size: 12px;
                     max-height: 80px; overflow: hidden; word-break: break-word;
                 }
-                .preview .num { color: #d4a64a; font-weight: 700; }
-                .preview .empty { color: #b9b1a0; font-style: italic; }
+                .preview .num { color: #1d6b4a; font-weight: 700; }
+                .preview .empty { color: #4f5648; font-style: italic; }
                 .title { display: flex; align-items: center; gap: 6px; }
-                .dot { width: 8px; height: 8px; border-radius: 999px; background: #d4a64a; display: inline-block; }
-                .dot.green { background: #2f8568; }
+                .dot { width: 8px; height: 8px; border-radius: 999px; background: #1d6b4a; display: inline-block; }
+                .dot.green { background: #087487; }
             </style>
             <div class="hud" role="dialog" aria-label="Finstracker picker">
                 <div class="title">
                     <span class="dot" id="finsDot"></span>
                     <strong>Finstracker</strong>
-                    <span style="color:#b9b1a0;font-size:11px;">click the points value on this page</span>
+                    <span style="color:#4f5648;font-size:11px;">click the points value on this page</span>
                 </div>
                 <div class="preview" id="finsPreview"><span class="empty">Hover over the points value…</span></div>
                 <div class="row">
@@ -348,7 +348,7 @@
     }
 
     // User-initiated cancel: tell the background to drop the capture
-    // session so the popup card banner ("Opening <issuer>…") clears.
+    // session so the side panel status clears.
     // Successful picks go through chooseElement -> pickerResult instead and
     // must NOT cancel, so cleanup() alone stays the no-signal teardown.
     function cancelPicker() {

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Finstracker \u2014 Sync",
-  "version": "0.2.0",
-  "description": "Capture credit card points from issuer portals and sync them to your Finstracker profile.",
+  "name": "Finstracker Sync",
+  "version": "1.0.0",
+  "description": "Sync card points from issuer sites, track credits and offers, and see the best card to use at checkout.",
   "permissions": [
     "storage",
     "tabs",
@@ -25,7 +25,25 @@
     "https://*.discover.com/*",
     "https://*.wellsfargo.com/*",
     "https://*.bankofamerica.com/*",
-    "https://*.usbank.com/*"
+    "https://*.usbank.com/*",
+    "https://*.barclaycardus.com/*",
+    "https://*.delta.com/*",
+    "https://*.united.com/*",
+    "https://*.southwest.com/*",
+    "https://*.aa.com/*",
+    "https://*.alaskaair.com/*",
+    "https://*.jetblue.com/*",
+    "https://*.aircanada.com/*",
+    "https://*.britishairways.com/*",
+    "https://*.flyingblue.com/*",
+    "https://*.marriott.com/*",
+    "https://*.hilton.com/*",
+    "https://*.hyatt.com/*",
+    "https://*.ihg.com/*",
+    "https://*.wyndhamhotels.com/*",
+    "https://*.choicehotels.com/*",
+    "https://*.amazon.com/*",
+    "https://*.biltrewards.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -36,7 +54,9 @@
       "https://finstracker.com/*",
       "https://*.finstracker.com/*",
       "http://localhost:3000/*",
-      "http://127.0.0.1:3000/*"
+      "http://127.0.0.1:3000/*",
+      "http://localhost:5175/*",
+      "http://127.0.0.1:5175/*"
     ]
   },
   "background": {
@@ -44,7 +64,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Finstracker \u2014 Sync",
+    "default_title": "Finstracker",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
@@ -53,7 +73,7 @@
     }
   },
   "side_panel": {
-    "default_path": "popup.html"
+    "default_path": "panel/panel.html"
   },
   "icons": {
     "16": "icons/icon-16.png",
@@ -61,7 +81,6 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "content_scripts": [],
   "web_accessible_resources": [
     {
       "resources": [
@@ -69,7 +88,8 @@
         "content/picker.js",
         "content/prompt.css",
         "content/prompt.js",
-        "favicon.svg",
+        "content/checkout.css",
+        "content/checkout.js",
         "icons/icon-16.png",
         "icons/icon-32.png",
         "icons/icon-48.png",

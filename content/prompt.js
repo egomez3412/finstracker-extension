@@ -60,17 +60,36 @@
         runBtn.dataset.act = "link-run";
         one.innerHTML = `<div class="fins-prompt-actions"><button class="fins-prompt-btn" type="button" data-act="link">Save</button></div>`;
     }
+    // No cards in Finstracker yet: the cards this site lists, to add and run in one go.
+    function renderStart() {
+        const list = current.newCards || [];
+        body.innerHTML = !current.scanned ? `Looking for your cards on <strong>${esc(site)}</strong>…`
+            : list.length ? `Finstracker found ${list.length === 1 ? "a card" : `${list.length} cards`} on <strong>${esc(site)}</strong>. Add ${list.length === 1 ? "it" : "them"} to Finstracker and autopilot updates each one's balance, adds its offers and checks its benefits.`
+            : `Sign in to <strong>${esc(site)}</strong> and Finstracker will find your cards here.`;
+        runBtn.textContent = list.length === 1 ? "Add card and run autopilot" : "Add cards and run autopilot";
+        runBtn.dataset.act = "add-run";
+        runBtn.hidden = !list.length;
+        one.innerHTML = "";
+    }
     // Cards the site lists that aren't in Finstracker yet: add them (checked by default) or hide them.
     function renderNew() {
         const list = current.newCards || [];
+        if (current.mode === "start") {
+            // The list only: the popup's main button adds and runs them.
+            fresh.innerHTML = list.length ? `<div class="fins-prompt-checks">${list.map((c) => `<label><input type="checkbox" data-new value="${esc(c.key)}" checked> ${esc(c.name)}${c.last4 ? ` <span class="fins-prompt-mask">•••• ${esc(c.last4)}</span>` : ""}</label>`).join("")}</div>
+                <div class="fins-prompt-actions"><button class="fins-prompt-btn fins-prompt-quiet" type="button" data-act="ignore-new">None of these are mine</button></div>` : "";
+            return;
+        }
         fresh.innerHTML = list.length ? `<div class="fins-prompt-newhead">${list.length === 1 ? "A card" : `${list.length} cards`} on ${esc(site)} ${list.length === 1 ? "isn't" : "aren't"} in Finstracker yet</div>
             <div class="fins-prompt-checks">${list.map((c) => `<label><input type="checkbox" data-new value="${esc(c.key)}" checked> ${esc(c.name)}${c.last4 ? ` <span class="fins-prompt-mask">•••• ${esc(c.last4)}</span>` : ""}</label>`).join("")}</div>
             <div class="fins-prompt-actions"><button class="fins-prompt-btn" type="button" data-act="add-new">${list.length === 1 ? "Add card" : "Add cards"}</button><button class="fins-prompt-btn fins-prompt-quiet" type="button" data-act="ignore-new">Not mine</button></div>` : "";
     }
     function render() {
         renderNew();
+        if (current.mode === "start") return renderStart();
         if (current.mode === "link") return renderLink();
         runBtn.dataset.act = "run";
+        runBtn.hidden = false;
         const cards = cardsHere();
         const names = cards.map((c) => `<strong>${esc(c.displayName)}</strong>`);
         const on = viewing();
@@ -113,8 +132,18 @@
             if (r?.ok === false) { setStatus(r.error || "Couldn't add the cards", "error"); return; }
             if (act === "add-new") setStatus(`Added ${r.added.map((c) => c.displayName).join(", ")}${r.failed?.length ? ` · couldn't add ${r.failed.join(", ")}` : ""}`, "ok");
             current = { ...current, newCards: (current.newCards || []).filter((c) => !keys.includes(c.key)) };
-            renderNew();
+            if (current.mode === "start") render(); else renderNew();
             return; // the popup is redrawn with the added cards
+        }
+        if (act === "add-run") {
+            const keys = [...fresh.querySelectorAll("input[data-new]")].filter((b) => b.checked).map((b) => b.value);
+            if (!keys.length) { setStatus("Tick at least one card", "error"); return; }
+            busy(true);
+            setStatus(`Adding ${keys.length === 1 ? "the card" : `${keys.length} cards`}…`, "busy");
+            const r = await send({ type: "addSiteCards", keys, run: true });
+            if (r?.ok === false) { setStatus(r.error || "Couldn't add the cards", "error"); busy(false); return; }
+            remove(); // autopilot's board takes over
+            return;
         }
         if (act === "link" || act === "link-run") {
             const ids = [...body.querySelectorAll("input[type=checkbox]:checked")].map((i) => i.value);

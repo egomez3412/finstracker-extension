@@ -72,6 +72,8 @@ On a card site, the Finstracker popup names your cards that use the site ("3 of 
 
 **Several cards at once.** Balances are read one card at a time, since the site shows one selected card. Offers and benefits keep running in their own background tabs while the next card is selected, when that's safe: the card is the only one on its site, or the site keeps the selected card in the page address (Amex's `account_key`, also read from the page's links), so its tabs keep showing it. Up to three cards' offers and benefits run at once. Sites that remember the selected card only in your session run one card at a time.
 
+**No cards yet.** On a bank's site with no cards in Finstracker (a new account, or after Start over), the popup looks for the cards the site lists ("Finstracker found 4 cards on americanexpress.com"), all ticked, with **Add cards and run autopilot**. Before you sign in it says to sign in, and looks again on the next page.
+
 **Start over.** Settings → Account → **Delete all** deletes every card on the signed-in Finstracker account with its offers and credits, and clears what the extension learned (pages, card numbers, autopilot results). Your sign-in and settings stay. It asks first, and can't be undone.
 
 **Clicking around the site.** When the page it opens doesn't show what it needs, autopilot clicks through the site the way you would, up to four links or tabs per step: for benefits, the Benefits link and then the tab with usage ("View Benefits Activity", "Track progress"); for offers, the Offers link and the list of offers you can still add ("Eligible offers"). If a page only lists offers already on the card, those are saved and it moves on to the ones it can still add. Tabs already selected and links already tried are skipped, and the site's menus and card switcher are never opened by accident. On Amex it goes straight to Benefits Activity, where usage lives, and reads every offer wording Amex uses ("Spend $75 or more, earn $30", "Earn +2 Membership Rewards® points per eligible dollar").
@@ -146,6 +148,7 @@ npm run e2e -- addall    # Amex-style offers: new formats ("Spend $75 or more, e
 npm run e2e -- amexbenefits # benefits behind "View details"; each benefit reported with what happened
 npm run e2e -- alloffers # Amex-style: added offers leave the list, "Added to Card" page; all 9 saved as on the card
 npm run e2e -- parallel  # account_key in the address: two new cards added and run, cards overlap, each card's offers on its own card
+npm run e2e -- fresh     # no cards in Finstracker, on Amex's address: popup finds 7 cards, adds and runs them all
 npm run e2e -- reset     # Settings → Delete all: cards, offers and credits deleted, learned pages forgotten, sign-in kept
 npm run e2e -- amextabs  # Amex layout: home → Rewards & Benefits → View Benefits Activity tab; "$200 Uber Cash · $0 To Go"; menus left closed
 npm run e2e -- noise     # © 2026, phone numbers, dates: never read or picked as a balance

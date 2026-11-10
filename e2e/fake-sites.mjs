@@ -111,6 +111,9 @@ export function startServer({ port = 3000 } = {}) {
         if (p === "/bank/app.js") return send(res, 200, "text/javascript", `
             // Single-page app: content arrives late, some links navigate in-app (like Amex), and the
             // DOM is built without innerHTML so it also runs under Trusted Types.
+            // The test may serve this bank at Amex's address: Amex's own paths are its pages.
+            const AMEX_PATHS = { "/offers/eligible": "/bank/offers", "/offers/enrolled": "/bank/amex-enrolled", "/card-benefits/activity": "/bank/benefits", "/card-benefits/view-all": "/bank/benefits", "/dashboard": "/bank/dashboard", "/overview": "/bank/dashboard", "/rewards": "/bank/rewards" };
+            var P = AMEX_PATHS[location.pathname] || location.pathname; // again on every draw (in-app routes)
             const el = (tag, text, style) => { const n = document.createElement(tag); if (text) n.textContent = text; if (style) n.style.cssText = style; return n; };
             const tile = (lines) => { const d = el("div"); d.className = "tile"; for (const [t, big] of lines) d.append(el("div", t, big ? "font-size:28px" : "")); return d; };
             const more = location.search.includes("more");
@@ -154,10 +157,10 @@ export function startServer({ port = 3000 } = {}) {
                 return n;
             }
             function amexHub(root) {
-                const activity = location.pathname === "/bank/amex-hub/activity";
+                const activity = P === "/bank/amex-hub/activity";
                 const tabs = el("div"); tabs.setAttribute("role", "tablist");
                 for (const [text, path] of [["Browse Benefits", "/bank/amex-hub"], ["View Benefits Activity", "/bank/amex-hub/activity"]]) {
-                    const t = el("button", text); t.setAttribute("role", "tab"); t.setAttribute("aria-selected", String(location.pathname === path));
+                    const t = el("button", text); t.setAttribute("role", "tab"); t.setAttribute("aria-selected", String(P === path));
                     t.addEventListener("click", () => { history.pushState({}, "", path); setTimeout(draw, 600); });
                     tabs.append(t);
                 }
@@ -183,18 +186,18 @@ export function startServer({ port = 3000 } = {}) {
             }
             var draw = function () {
                 const root = document.getElementById("root");
-                if (location.pathname.startsWith("/bank/amex-home") || location.pathname.startsWith("/bank/amex-hub")) {
+                if (P.startsWith("/bank/amex-home") || P.startsWith("/bank/amex-hub")) {
                     root.replaceChildren(amexNav());
-                    if (location.pathname === "/bank/amex-home") root.append(tile([["Platinum Card® (...1004)"], ["Membership Rewards® Points"], ["150,000", true]]), el("p", "Statement balance $1,240.18"));
+                    if (P === "/bank/amex-home") root.append(tile([["Platinum Card® (...1004)"], ["Membership Rewards® Points"], ["150,000", true]]), el("p", "Statement balance $1,240.18"));
                     else amexHub(root);
                     return;
                 }
                 root.replaceChildren(nav());
-                if (location.pathname !== "/bank/dashboard") root.append(switcher());
-                if (location.pathname === "/bank/dashboard") {
+                if (P !== "/bank/dashboard") root.append(switcher());
+                if (P === "/bank/dashboard") {
                     root.append(tile([["Sapphire Preferred (...9876)"], ["Current balance"], ["$1,111.00", true]]));
                     if (location.search.includes("promo")) root.append(tile([["Welcome offer"], ["2,000", true], ["bonus points"]]));
-                } else if (location.pathname === "/bank/rewards") {
+                } else if (P === "/bank/rewards") {
                     root.append(
                         tile([["Freedom Unlimited (...1234)"], ["Cash back rewards"], ["12,345", true], ["points"]]),
                         acct === "c3" ? tile([["Gold Card (...3001)"], ["Membership Rewards"], ["45,000", true], ["points"]])
@@ -209,7 +212,7 @@ export function startServer({ port = 3000 } = {}) {
                     if (more) rows.unshift(["Nov 8", "Dining", "+500 pts"]);
                     for (const r of rows) list.append(el("li", r.join("  ·  ")));
                     root.append(el("h3", "Points activity"), list);
-                } else if (location.pathname === "/bank/offers") {
+                } else if (P === "/bank/offers") {
                     const decoy = el("button", "Add card"); decoy.addEventListener("click", () => { document.body.dataset.decoy = "clicked"; });
                     root.append(decoy);
                     // Like Amex: the list arrives late (so one card's offers are still running while
@@ -226,7 +229,7 @@ export function startServer({ port = 3000 } = {}) {
                         b.addEventListener("click", () => { b.textContent = "Added"; });
                         t.append(b); root.append(t);
                     }
-                } else if (location.pathname === "/bank/amex-offers") {
+                } else if (P === "/bank/amex-offers") {
                     // Amex-style offers: many formats, the list redraws after every click, more behind
                     // "Load more", and one offer whose first click doesn't take.
                     const decoy = el("button", "Add card"); decoy.addEventListener("click", () => { document.body.dataset.decoy = "clicked"; });
@@ -259,7 +262,7 @@ export function startServer({ port = 3000 } = {}) {
                         root.append(more);
                     }
                     window.__addedCount = () => state.added.size;
-                } else if (location.pathname === "/bank/amex-eligible" || location.pathname === "/bank/amex-enrolled") {
+                } else if (P === "/bank/amex-eligible" || P === "/bank/amex-enrolled") {
                     // Like Amex: an offer leaves this list once added (the list redraws), and moves to
                     // "Added to Card", a page of its own that also has the offers added before.
                     const added = new Set(JSON.parse(sessionStorage.getItem("added") || "[]"));
@@ -271,10 +274,10 @@ export function startServer({ port = 3000 } = {}) {
                     const list = el("div"); list.id = "offer-list"; root.append(list);
                     const drawList = () => {
                         list.replaceChildren();
-                        const rows = location.pathname === "/bank/amex-enrolled" ? [...before, ...all.filter(([m]) => added.has(m))] : all.filter(([m]) => !added.has(m));
+                        const rows = P === "/bank/amex-enrolled" ? [...before, ...all.filter(([m]) => added.has(m))] : all.filter(([m]) => !added.has(m));
                         for (const [merchant, badge] of rows) {
                             const t = tile([[merchant], [badge], ["Expires 12/31/26"]]);
-                            if (location.pathname === "/bank/amex-eligible") {
+                            if (P === "/bank/amex-eligible") {
                                 const b = el("button", ""); b.title = "add to list card"; b.append(el("span", "+")); b.style.cssText = "width:28px;height:28px";
                                 b.addEventListener("click", () => { added.add(merchant); sessionStorage.setItem("added", JSON.stringify([...added])); setTimeout(drawList, 250); });
                                 t.append(b);
@@ -283,7 +286,7 @@ export function startServer({ port = 3000 } = {}) {
                         }
                     };
                     drawList();
-                } else if (location.pathname === "/bank/amex-benefits") {
+                } else if (P === "/bank/amex-benefits") {
                     // Amex-style benefits: usage hidden in collapsed "View details" sections.
                     for (const [name, detail] of [["Uber Cash", "Earned $15.00 of $15.00"], ["Digital Entertainment Credit", "$5.00 used · $15.00 remaining"], ["Saks Fifth Avenue Credit", "Credit received"], ["Walmart+ Credit", "$0.00 remaining"]]) {
                         const t = el("section"); t.className = "benefit";
@@ -293,7 +296,7 @@ export function startServer({ port = 3000 } = {}) {
                         btn.addEventListener("click", () => { panel.hidden = !panel.hidden; btn.setAttribute("aria-expanded", String(!panel.hidden)); });
                         t.append(head, btn, panel); root.append(t);
                     }
-                } else if (location.pathname === "/bank/benefits") {
+                } else if (P === "/bank/benefits") {
                     if (acct === "c3") root.append(tile([["Dining Credit"], ["$10 of $10 used"]]));
                     else root.append(tile([["Uber Cash"], ["$10 of $10 used"]]), tile([["Digital Entertainment Credit"], ["$5 of $20 used"]]));
                 }
@@ -301,9 +304,10 @@ export function startServer({ port = 3000 } = {}) {
             // Every page ends with a footer full of numbers that are not balances, plus a stray copyright line.
             const drawn = draw;
             draw = function () {
+                P = AMEX_PATHS[location.pathname] || location.pathname;
                 drawn();
                 const root = document.getElementById("root");
-                if (location.pathname === "/bank/no-balance") root.append(el("h2", "Membership Rewards"), el("p", "Your points summary is updating."));
+                if (P === "/bank/no-balance") root.append(el("h2", "Membership Rewards"), el("p", "Your points summary is updating."));
                 root.append(el("div", "© 2026 Mock Bank, N.A."));
                 const f = el("footer");
                 f.append(el("p", "© 2026 Mock Bank. All rights reserved."), el("a", "Membership Rewards terms"), el("p", "Questions? Call 1-800-528-4800"), el("p", "Member since 2015"), el("p", "Rewards updated Nov 8, 2026"));
@@ -313,6 +317,8 @@ export function startServer({ port = 3000 } = {}) {
         if (p === "/bank/login" && req.method === "POST") { res.writeHead(302, { location: "/bank/dashboard", "set-cookie": "bank=1; Path=/" }); return res.end(); }
         const signedIn = /(^|;\s*)bank=1/.test(req.headers.cookie || "");
         const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance", "/bank/amex-home", "/bank/amex-hub", "/bank/amex-hub/activity", "/bank/amex-eligible", "/bank/amex-enrolled"];
+        const AMEX_PAGES = ["/offers/eligible", "/offers/enrolled", "/card-benefits/activity", "/card-benefits/view-all", "/dashboard", "/overview", "/rewards"];
+        if (AMEX_PAGES.includes(p)) pages.push(p);
         if (pages.includes(p) && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }
         if (p === "/bank/login") return send(res, 200, "text/html", page("Sign in", `<form method="post" action="/bank/login"><input name="user" autocomplete="username"><input type="password" name="pw"><button>Sign in</button></form>`), h);
         if (p === "/bank/rewards") h["content-security-policy"] = `${csp}; require-trusted-types-for 'script'`;

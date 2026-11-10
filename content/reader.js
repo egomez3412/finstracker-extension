@@ -944,7 +944,7 @@
     // Reads the switcher's options even while hidden; opens it (and closes it again) only when the
     // site draws them on open. Returns [{ text }]; the worker cleans and matches them.
     async function listSiteCards() {
-        const MASK = /(?:\.{2,}|[•*·∙●]+|(?<![a-z])x{1,4}|ending(?: in)?)\s*\d{4}\b/i;
+        const MASK = /(?:\.{2,}|[•*·∙●]+|(?<![a-z])x{1,4}|ending(?: in)?)\s*\d{4,5}\b/i; // Amex: "••••61007"
         const OFFER = /(\$\s?\d|%|\bearn\b|\bspend\b|\bpay\b|\bdue\b|\bbalance\b|statement|payment|transaction)/i;
         const ours = "#fins-launcher-root, #fins-status-root, #fins-prompt-root, #fins-picker-host, #fins-board-root";
         const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -955,7 +955,7 @@
                 if (!el || el.closest(ours)) return;
                 const t = textOf(el);
                 if (!t || t.length > 90 || !MASK.test(t) || OFFER.test(t)) return;
-                const n = (t.match(/(\d{4})\b(?!.*\d{4}\b)/) || [])[1];
+                const n = (t.match(/(\d{4,5})\b(?!.*\d{4,5}\b)/) || [])[1];
                 if (n && (!out.has(n) || t.length < out.get(n).length)) out.set(n, t);
             };
             document.querySelectorAll("[role='option'], [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='radio'], [aria-haspopup], li, button, a, h1, h2, h3").forEach(add);
@@ -966,7 +966,9 @@
         let found = collect();
         // One card shown and a switcher that lists the rest only when opened: open it, read, close it.
         const opener = [...document.querySelectorAll("[aria-haspopup][aria-expanded='false'], [aria-haspopup]:not([aria-expanded])")]
-            .find((el) => !el.closest(ours) && MASK.test(textOf(el)) && el.getBoundingClientRect().width > 2);
+            .concat([...document.querySelectorAll("[role='combobox'][aria-expanded='false']")])
+            // The switcher shows the current card, or (Amex's Overview) says what it's for.
+            .find((el) => !el.closest(ours) && (MASK.test(textOf(el)) || /\b(accounts?|cards?)\b/i.test(el.getAttribute("aria-label") || "")) && el.getBoundingClientRect().width > 2);
         if (opener && found.size < 2) {
             opener.click();
             await pause(700);

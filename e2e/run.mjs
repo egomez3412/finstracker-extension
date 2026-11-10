@@ -25,7 +25,7 @@ try {
   if (!sw) sw = await ctx.waitForEvent("serviceworker", { timeout: 10000 });
   sw.on("console", (m) => { if (m.type() !== "log" || (process.env.DEBUG && m.text().startsWith("[dbg]"))) log("sw", m.type(), m.text()); });
   const extId = new URL(sw.url()).host;
-  await sw.evaluate(() => chrome.storage.local.set({ token: "test-token", apiBase: "http://localhost:3000", devServer: true, user: { username: "e2e" }, rewardsPages: { c1: { url: "http://localhost:3000/bank/dashboard", source: "learned" } } }));
+  await sw.evaluate(() => chrome.storage.local.set({ token: "test-token", apiBase: "http://localhost:3000", devServer: true, autoAddCards: false, user: { username: "e2e" }, rewardsPages: { c1: { url: "http://localhost:3000/bank/dashboard", source: "learned" } } }));
   const session = () => sw.evaluate(() => chrome.storage.local.get("captureSession").then((r) => r.captureSession || null));
   const waitFor = async (pred, label, ms = 40000) => {
     const end = Date.now() + ms; let last = "";
@@ -314,6 +314,91 @@ try {
     ok = maxPages >= pagesAfter + 2 && boardSeen && /3 cards/.test(popup || "") && state.cards.c1.currentPoints === 98765 && state.cards.c3.currentPoints === 45000 && state.cards.c2.currentCashBack === 123.45
       && offersOf("c1") === "Best Buy,Chipotle,Delta" && offersOf("c3") === "Hilton,Saks" && offersOf("c2") === "" && state.offers.every((o) => o.activated)
       && state.perks.find((x) => x.id === "p-uber").used && state.perks.find((x) => x.id === "p-dining").used && !state.perks.find((x) => x.id === "p-de").used;
+  } else if (scenario === "parallel") {
+    // Like Amex: the address picks the card (?account_key=, on every link) and the switcher lists two
+    // cards that aren't in Finstracker. Autopilot adds them and runs them too, and a card's offers
+    // and benefits keep running in their own tabs while the next card is selected.
+    state.urlKeyed = true; state.newCard = true;
+    const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";
+    await sw.evaluate((path) => chrome.storage.local.set({
+      autoAddCards: true,
+      portalOverrides: Object.fromEntries(["c1", "c3", "c4"].map((id) => [id, { matchUrl: "http://localhost:3000/*", selector: path, source: "user-picker" }])),
+      rewardsPages: Object.fromEntries(["c1", "c3", "c4"].map((id) => [id, { url: "http://localhost:3000/bank/rewards", source: "user" }])),
+    }), path);
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/rewards"); await sleep(2500); await bank.bringToFront();
+    const started = Date.now();
+    await bank.click('#fins-prompt-root [data-act="run"]');
+    let run, maxPages = ctx.pages().length, notice = "", lastLine = "";
+    const confirms = [];
+    const end = Date.now() + 300000;
+    await sleep(1500);
+    while (Date.now() < end) {
+      maxPages = Math.max(maxPages, ctx.pages().length);
+      if (!notice) notice = await bank.evaluate(() => document.querySelector("#fins-board-root") ? "" : "").catch(() => "");
+      run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot"]));
+      if (run.autopilotRun?.board?.notice?.text) notice = run.autopilotRun.board.notice.text;
+      // A new card's first balance asks "Is this your balance?": say yes, as you would.
+      const asked = await bank.evaluate(() => document.querySelector("#fins-status-root") && document.querySelector('#fins-status-root [data-action="confirm"]') ? `${document.querySelector("#fins-status-root").innerText.replace(/\n+/g, " | ").slice(0, 160)} || url=${location.search} tile=${[...document.querySelectorAll(".tile")].map((t) => t.innerText.split("\n")[0]).join(";")}` : "").catch(() => "");
+      if (asked) { confirms.push(asked); await bank.click('#fins-status-root [data-action="confirm"]', { timeout: 500 }).catch(() => {}); await sleep(800); }
+      if (process.env.DEBUG) { const line = (run.autopilotRun?.board?.cards || []).map((c) => `${c.name.slice(0, 10)}[${c.steps.map((x) => `${x.state[0]}:${(x.text || "").slice(0, 40)}`).join(" / ")}]`).join("  "); if (line !== lastLine) { log("  ", line); lastLine = line; } }
+      if (!run.autopilotRun) break;
+      await sleep(500);
+    }
+    const took = Math.round((Date.now() - started) / 1000);
+    await sleep(800);
+    const made = Object.values(state.cards).filter((c) => c.id.startsWith("n"));
+    const idOf = (name) => made.find((c) => c.displayName.includes(name))?.id;
+    const offersOf = (id) => state.offers.filter((o) => o.cardId === id).map((o) => o.merchant).sort().join(",");
+    const order = state.log.map((x) => `${x.kind}:${x.cardId}`);
+    // Overlap: a card's offers were saved after a later card's balance.
+    const overlapped = state.log.some((a, i) => a.kind === "balance" && state.log.slice(i + 1).some((b) => b.kind === "balance" && b.cardId !== a.cardId && state.log.slice(state.log.indexOf(b) + 1).some((c) => c.kind === "offers" && c.cardId === a.cardId)));
+    log("took", took, "s | most pages open:", maxPages, "| notice:", notice);
+    log("added:", made.map((c) => `${c.id} ${c.displayName}`).join(", "));
+    for (const c of confirms) log("  asked:", c);
+    log("order:", order.join(" "));
+    for (const id of ["c1", "c3", "c4", ...made.map((c) => c.id)]) log(id, JSON.stringify(run.autopilot?.[id]?.results));
+    log("offers:", ["c1", "c3", "c4", ...made.map((c) => c.id)].map((id) => `${id}=${offersOf(id)}`).join(" | "));
+    await bank.screenshot({ path: `${SHOTS}/parallel-board.png` });
+    ok = idOf("Delta") && idOf("Hilton") && /Added .*Delta.*Hilton|Added .*Hilton.*Delta/.test(notice)
+      && offersOf("c1") === "Best Buy,Chipotle,Delta" && offersOf("c3") === "Hilton,Saks" && offersOf("c4") === "Resy"
+      && offersOf(idOf("Delta")) === "Delta Stays" && offersOf(idOf("Hilton")) === "Hilton Resorts"
+      && state.cards.c3.currentPoints === 45000 && state.cards.c4.currentPoints === 150000
+      && state.cards[idOf("Delta")].currentPoints === 62000 && state.cards[idOf("Hilton")].currentPoints === 250000
+      && confirms.filter((c) => /Delta|Hilton/.test(c.split("||")[0])).every((c) => (/Delta/.test(c.split("||")[0]) ? /DLT04/ : /HLT08/).test(c))
+      && overlapped && maxPages >= 5;
+  } else if (scenario === "alloffers") {
+    // Like Amex: an added offer leaves the list of offers to add, and the ones already on the card
+    // are listed on their own page. Every offer is saved: the ones just added (gone from the list
+    // when it's read again) and the ones that were already on the card.
+    await sw.evaluate(() => chrome.storage.local.set({ learnedPages: { c1: { offers: "http://localhost:3000/bank/amex-eligible" } } }));
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.bringToFront();
+    await panel.click('[data-act="sync-offers"][data-id="c1"]').catch(() => {});
+    const s = await waitFor((s) => s?.kind === "offers" && (s.status === "synced" || s.status === "error"), "offers synced", 120000);
+    log("status:", s.statusLabel || s.lastError, "| on", bank.url());
+    log("saved:", state.offers.length, JSON.stringify(state.offers.map((o) => [o.merchant, o.activated])));
+    const names = state.offers.map((o) => o.merchant).sort().join(",");
+    ok = s.status === "synced" && names === "Audible,Best Buy,Dell,Duolingo,Glasses.com,Lyft,Saks,Uber Eats,Walmart" && state.offers.every((o) => o.activated)
+      && /Added 6 to your card · 9 offers saved · 9 on the card/.test(s.statusLabel || "");
+  } else if (scenario === "reset") {
+    // Settings → Start over: every card, its offers and credits are deleted; learned pages forgotten.
+    state.offers.push({ cardId: "c1", merchant: "Old offer" }, { cardId: "c3", merchant: "Older offer" });
+    await sw.evaluate(() => chrome.storage.local.set({ learnedPages: { c1: { offers: "http://localhost:3000/bank/offers" } }, cardLast4: { c1: "9876" } }));
+    await panel.reload(); await sleep(1500);
+    await panel.click("#settings-toggle");
+    await panel.click('[data-act="reset-ask"]');
+    const ask = await panel.evaluate(() => document.querySelector(".row-confirm")?.innerText.replace(/\n+/g, " | "));
+    log("confirm:", ask, "| cards before:", Object.keys(state.cards).length);
+    await panel.click('[data-act="reset-confirm"]');
+    await sleep(2500);
+    const kept = await sw.evaluate(() => chrome.storage.local.get(["learnedPages", "cardLast4", "token", "autoAddCards"]));
+    const toast = await panel.evaluate(() => document.querySelector(".toast")?.innerText || "");
+    log("toast:", toast, "| cards:", Object.keys(state.cards).length, "| offers:", state.offers.length, "| perks:", state.perks.length, "| kept:", JSON.stringify(kept));
+    ok = /Delete all 5 cards/.test(ask || "") && Object.keys(state.cards).length === 0 && state.offers.length === 0 && state.perks.length === 0
+      && !kept.learnedPages && !kept.cardLast4 && kept.token === "test-token" && /Deleted 5 cards, 2 offers and 4 credits/.test(toast);
   } else if (scenario === "viewing") {
     // Amex Gold and Amex Platinum on one site; the page shows Platinum in its top bar.
     const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";

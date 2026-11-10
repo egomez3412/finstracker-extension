@@ -191,3 +191,8 @@ main { display: grid; gap: 16px; padding: 4px 16px 24px; }
 .link-list { display: grid; gap: 6px; max-height: 200px; overflow: auto; }
 .link-item { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .panel-foot-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid var(--color-hairline); }
+
+/* Start over: the confirm row and its red button. */
+.row-confirm { flex-wrap: wrap; gap: 8px; }
+.row-confirm .action-row { margin-left: auto; }
+.btn-danger { background: var(--color-red); border-color: var(--color-red); }

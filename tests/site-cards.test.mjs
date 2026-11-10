@@ -65,3 +65,10 @@ test("cards the user said aren't theirs stay hidden", () => {
     const { fresh } = newSiteCards([{ name: "Delta SkyMiles Gold Card", last4: "3004" }], mine, { ignored: ["3004"] });
     assert.equal(fresh.length, 0);
 });
+
+test("bank accounts in an Amex switcher are not cards", () => {
+    assert.equal(cleanSiteCardName("American Express Rewards Checking ••••1234"), null);
+    assert.equal(cleanSiteCardName("High Yield Savings Acct ••••5678"), null);
+    assert.deepEqual(cleanSiteCardName("Corporate Card ••••91007"), { name: "Corporate Card", last4: "1007" });
+    assert.deepEqual(cleanSiteCardName("American Express Gold Card ••••41002"), { name: "American Express Gold Card", last4: "1002" });
+});

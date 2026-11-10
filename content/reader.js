@@ -927,5 +927,43 @@
         return false;
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard };
+    // Every card the site lists for this login: the card switcher's options, account tiles, the
+    // card in the top bar. Each is a short text with a masked number ("The Platinum Card® •••• 1004").
+    // Reads the switcher's options even while hidden; opens it (and closes it again) only when the
+    // site draws them on open. Returns [{ text }]; the worker cleans and matches them.
+    async function listSiteCards() {
+        const MASK = /(?:\.{2,}|[•*·∙●]+|(?<![a-z])x{1,4}|ending(?: in)?)\s*\d{4}\b/i;
+        const OFFER = /(\$\s?\d|%|\bearn\b|\bspend\b|\bpay\b|\bdue\b|\bbalance\b|statement|payment|transaction)/i;
+        const ours = "#fins-launcher-root, #fins-status-root, #fins-prompt-root, #fins-picker-host, #fins-board-root";
+        const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+        const textOf = (el) => (el.textContent || "").replace(/\s+/g, " ").trim();
+        const collect = () => {
+            const out = new Map();
+            const add = (el) => {
+                if (!el || el.closest(ours)) return;
+                const t = textOf(el);
+                if (!t || t.length > 90 || !MASK.test(t) || OFFER.test(t)) return;
+                const n = (t.match(/(\d{4})\b(?!.*\d{4}\b)/) || [])[1];
+                if (n && (!out.has(n) || t.length < out.get(n).length)) out.set(n, t);
+            };
+            document.querySelectorAll("[role='option'], [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='radio'], [aria-haspopup], li, button, a, h1, h2, h3").forEach(add);
+            // Short leaf-ish blocks too (account tiles), but not whole sections.
+            for (const el of document.body ? document.body.querySelectorAll("div, span, p") : []) if (el.children.length <= 3) add(el);
+            return out;
+        };
+        let found = collect();
+        // One card shown and a switcher that lists the rest only when opened: open it, read, close it.
+        const opener = [...document.querySelectorAll("[aria-haspopup][aria-expanded='false'], [aria-haspopup]:not([aria-expanded])")]
+            .find((el) => !el.closest(ours) && MASK.test(textOf(el)) && el.getBoundingClientRect().width > 2);
+        if (opener && found.size < 2) {
+            opener.click();
+            await pause(700);
+            found = new Map([...found, ...collect()]);
+            if (opener.getAttribute("aria-expanded") === "true") opener.click();
+            else document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        }
+        return [...found.values()].map((text) => ({ text }));
+    }
+
+    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard, listSiteCards };
 })();

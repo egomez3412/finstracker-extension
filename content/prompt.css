@@ -75,3 +75,12 @@
 .fins-prompt-checks label { display: flex; align-items: center; gap: 8px; color: #1a1f17; font-size: 13px; cursor: pointer; }
 .fins-prompt-checks input { all: revert; margin: 0; }
 @media (prefers-color-scheme: dark) { .fins-prompt-checks label { color: #eef4ee; } }
+
+/* Cards on the site that aren't in Finstracker yet */
+.fins-prompt-new:empty { display: none; }
+.fins-prompt-new { margin: 10px 0; padding-top: 10px; border-top: 1px solid #f0e9da; }
+.fins-prompt-new .fins-prompt-btn { white-space: nowrap; }
+.fins-prompt-newhead { font-weight: 600; font-size: 13px; }
+.fins-prompt-mask { color: #4f5648; font-size: 12px; }
+.fins-prompt-quiet { background: transparent !important; }
+@media (prefers-color-scheme: dark) { .fins-prompt-new { border-top-color: #3c4940; } .fins-prompt-mask { color: #aebcb2; } }

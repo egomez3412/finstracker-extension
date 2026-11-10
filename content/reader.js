@@ -693,36 +693,41 @@
     }
 
 
-    // A same-site link or tab whose text has one of the words ("benefits", "credits", "activity").
-    // Followed by href, or clicked when it is a button. Returns { href } / { clicked } / null.
+    // A same-site link or tab whose text has one of the words ("benefits activity", "offers").
+    // Words earlier in the list win; between equals an in-page tab beats a link, and a short label
+    // beats a long one. The tab already selected and the page already open are skipped, and so are
+    // links (by href) and buttons ("text:<label>") in avoid. Followed by href, or clicked when it is
+    // a button or tab. Returns { href } / { clicked, text } / null.
     function findLink(words, avoid) {
         const WANT = (words || []).map((w) => String(w).toLowerCase());
         const AVOID = new Set(avoid || []);
-        const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?out|log ?out|refer|privacy|careers|español|compare)\b/;
+        const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?out|log ?out|refer|privacy|careers|español|compare|enroll|disclosures?)\b/;
         const site = (h) => h.split(".").slice(-2).join(".");
+        const here = location.href.split("#")[0];
         let best = null;
-        for (const el of document.querySelectorAll("a[href], [role='link'], [role='tab'], button, [role='menuitem']")) {
+        for (const el of document.querySelectorAll("a[href], [role='link'], [role='tab'], button, [role='menuitem'], [role='button']")) {
             const r = el.getBoundingClientRect();
             if (r.width < 4 || r.height < 4) continue;
+            if (el.getAttribute("aria-selected") === "true" || el.getAttribute("aria-current") === "page") continue;
             const text = `${el.innerText || el.textContent || ""} ${el.getAttribute("aria-label") || ""}`.toLowerCase().replace(/\s+/g, " ").trim();
             if (!text || text.length > 60 || BAD.test(text)) continue;
             const hit = WANT.findIndex((w) => text.includes(w));
             if (hit < 0) continue;
             let href = null;
-            if (el.tagName === "A") {
+            if (el.tagName === "A" && el.getAttribute("href") && !/^(#|javascript:)/i.test(el.getAttribute("href"))) {
                 try {
                     const u = new URL(el.getAttribute("href"), location.href);
                     if (!/^https?:$/.test(u.protocol) || site(u.hostname) !== site(location.hostname)) continue;
                     href = u.href;
                 } catch { continue; }
-                if (AVOID.has(href) || href === location.href) continue;
-            }
-            const score = 100 - hit * 5 - text.length / 10;
-            if (!best || score > best.score) best = { el, href, score };
+                if (AVOID.has(href) || href.split("#")[0] === here) continue;
+            } else if (AVOID.has(`text:${text}`)) continue;
+            const score = 100 - hit * 5 + (el.getAttribute("role") === "tab" ? 2 : 0) - text.length / 10;
+            if (!best || score > best.score) best = { el, href, text, score };
         }
         if (!best) return null;
         if (best.href) return { href: best.href };
-        try { best.el.click(); return { clicked: true }; } catch { return null; }
+        try { best.el.scrollIntoView({ block: "center" }); best.el.click(); return { clicked: true, text: best.text }; } catch { return null; }
     }
 
     // Open collapsed benefit details ("View details", "Track progress", accordions) so usage is on
@@ -734,7 +739,10 @@
             if (opened >= 40) break;
             const r = el.getBoundingClientRect();
             if (r.width < 2 || r.height < 2) continue;
+            // Not the site's menus, dropdowns or card switcher: only sections that open in place.
+            if (el.getAttribute("aria-haspopup") || el.closest("header, nav, [role='navigation'], [role='banner'], [role='menubar']")) continue;
             const t = `${el.innerText || ""} ${el.getAttribute("aria-label") || ""}`.trim();
+            if (/^(menu|search|close|cancel|log ?out|sign ?out)$/i.test(t)) continue;
             if (el.tagName !== "SUMMARY" && !WANT.test(t) && t.length > 60) continue;
             try { el.click(); opened += 1; } catch { /* keep going */ }
             await new Promise((res) => setTimeout(res, 120));
@@ -754,7 +762,7 @@
         const found = [];
         for (const el of document.querySelectorAll("li, article, section, div, [role='listitem']")) {
             const text = (el.innerText || "").replace(/[  ]/g, " ").trim();
-            if (text.length < 8 || text.length > 400) continue;
+            if (text.length < 8 || text.length > 600) continue;
             const r = el.getBoundingClientRect();
             if (r.width < 4 || r.height < 4) continue;
             let used = null, total = null, remaining = null;
@@ -773,8 +781,12 @@
             if (el.querySelector("nav, header, h1, [role='navigation']") || el.querySelectorAll("h2, h3, h4, [role='heading']").length > 1 || el.querySelectorAll("[aria-expanded]").length > 1) continue;
             // The benefit's name: a line that isn't a status ("Credit received", "$5 used", "View details").
             const isStatus = (t) => DONE.test(t) || OF.test(t) || USED.test(t) || LEFT.test(t) || /^(view|see|show|hide|track)\b|^(used|remaining|earned|completed?|details|learn more|enrolled?)\b/i.test(t);
-            const title = text.split(/\n+/).map((t) => t.trim()).find((t) => /[a-z]{3}/i.test(t) && t.length <= 80 && !/\$\s?\d/.test(t) && !isStatus(t));
-            if (!title) continue;
+            // Amex names its credits by their size ("$200 Uber Cash", "$300 Digital Entertainment
+            // Credit"): a line that starts with the amount is a name; the amount is dropped.
+            const named = (t) => !/\$\s?\d/.test(t) || /^\$\s?[\d,]+(?:\.\d{2})?\s+[a-z]/i.test(t);
+            const line = text.split(/\n+/).map((t) => t.trim()).find((t) => /[a-z]{3}/i.test(t) && t.length <= 80 && named(t) && !isStatus(t));
+            const title = line && line.replace(/^\$\s?[\d,]+(?:\.\d{2})?\s+/, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+            if (!title || !/[a-z]{3}/i.test(title)) continue;
             const fullyUsed = done || (total > 0 && used >= total) || (remaining === 0 && (used > 0 || total > 0 || /\$\s?0(\.00)?\s*(remaining|left)/i.test(text)));
             found.push({ el, title, used, total, remaining, fullyUsed });
         }

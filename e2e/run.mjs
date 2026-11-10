@@ -376,7 +376,8 @@ try {
     const decoy = await bank.evaluate(() => document.body.dataset.decoy || "not clicked");
     log("status:", s.statusLabel || s.lastError, "| buttons:", buttons.join(", "), "| decoy:", decoy);
     log("saved:", state.offers.length, JSON.stringify(state.offers.map((o) => [o.merchant, o.activated])));
-    ok = s.status === "synced" && buttons.length === 8 && buttons.every((b) => /Added/.test(b)) && decoy === "not clicked" && state.offers.length === 8 && state.offers.every((o) => o.activated);
+    ok = s.status === "synced" && buttons.length === 10 && buttons.every((b) => /Added/.test(b)) && decoy === "not clicked" && state.offers.length === 10 && state.offers.every((o) => o.activated)
+      && state.offers.some((o) => o.merchant === "Duolingo" && o.discountValue === 3000 && o.minSpendCents === 7500);
   } else if (scenario === "amexbenefits") {
     // Amex-style benefits: usage behind "View details"; reports each benefit and what happened to it.
     bank = await ctx.newPage();
@@ -391,6 +392,25 @@ try {
     await bank.screenshot({ path: `${SHOTS}/amex-benefits.png` });
     const used = (id) => state.perks.find((x) => x.id === id).used;
     ok = s.status === "synced" && used("p-uber") && used("p-saks") && !used("p-de") && (s.rows || []).length === 4 && /no matching credit/.test(JSON.stringify(s.rows));
+  } else if (scenario === "amextabs") {
+    // Amex's layout: from the home page, click Rewards & Benefits, then the View Benefits Activity tab
+    // (usage is only there, as "$15 Earned Nov · $0 To Go" under credits named "$200 Uber Cash").
+    // The site's menus are left alone, and the activity page is remembered for next time.
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/amex-home"); await sleep(1500); await bank.bringToFront();
+    await panel.click('[data-act="sync-benefits"][data-id="c1"]').catch(() => {});
+    const s = await waitFor((s) => s?.kind === "benefits" && (s.status === "synced" || s.status === "error"), "benefits read", 90000);
+    await sleep(500);
+    const menu = await bank.evaluate(() => document.body.dataset.menu || "closed");
+    const learned = (await sw.evaluate(() => chrome.storage.local.get("learnedPages"))).learnedPages?.c1?.benefits;
+    log("status:", s.statusLabel || s.lastError, "| on", bank.url(), "| menu:", menu, "| learned:", learned);
+    log("rows:", JSON.stringify(s.rows));
+    const used = (id) => state.perks.find((x) => x.id === id).used;
+    const rows = JSON.stringify(s.rows || []);
+    ok = s.status === "synced" && /\/bank\/amex-hub\/activity$/.test(bank.url()) && used("p-uber") && !used("p-de") && menu === "closed"
+      && /"Uber Cash"/.test(rows) && /"Digital Entertainment Credit"/.test(rows) && /"CLEAR Plus Credit","\$209 used · \$0 left · no matching credit/.test(rows)
+      && /amex-hub\/activity$/.test(learned || "");
   } else if (scenario === "noise") {
     // A page whose only numbers are a copyright year, a phone number, "Member since 2015" and a date:
     // none of them may be read as the balance, by the reader or by the picker.

@@ -16,6 +16,8 @@
     const isTop = window.top === window.self;
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     const send = (msg) => { try { chrome.runtime.sendMessage(msg, () => void chrome.runtime.lastError); } catch { /* extension reloaded */ } };
+    let iconUrl = "";
+    try { iconUrl = chrome.runtime.getURL("icons/icon-48.png"); } catch { /* extension reloaded */ }
 
     function textOf(el) { return el ? (el.innerText || el.textContent || "").replace(/[    ]/g, " ").trim() : ""; }
     function firstNumber(text) {
@@ -115,7 +117,7 @@
         if (!hud) return;
         const n = chosenEl ? firstNumber(textOf(chosenEl)) : null;
         hud.innerHTML = `
-            <div class="head"><img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt="" width="18" height="18"><span>Finstracker</span><button type="button" class="x" data-act="cancel" aria-label="Cancel">×</button></div>
+            <div class="head">${iconUrl ? `<img src="${iconUrl}" alt="" width="18" height="18">` : ""}<span>Finstracker</span><button type="button" class="x" data-act="cancel" aria-label="Cancel">×</button></div>
             <div class="step">Step ${step} of 2</div>
             ${step === 1 ? `
                 <div class="title">Click your ${esc(cardName)} balance</div>

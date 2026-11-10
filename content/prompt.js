@@ -4,7 +4,11 @@
 (function () {
     const payload = window.__finsPromptPayload || {};
     if (window.__finsPromptInstance) { try { window.__finsPromptInstance.update(payload); } catch { /* replaced below */ } return; }
-    if (document.getElementById("fins-prompt-root")) return;
+    // A popup left by an earlier copy of the extension (reloaded or updated): replace it.
+    document.querySelectorAll("#fins-prompt-root").forEach((n) => n.remove());
+    const alive = () => { try { return Boolean(chrome.runtime?.id); } catch { return false; } }; // false once the extension is reloaded or updated
+    let iconUrl = "";
+    try { iconUrl = chrome.runtime.getURL("icons/icon-48.png"); } catch { /* extension reloaded */ }
 
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     const site = location.hostname.replace(/^(www|secure|online|global|connect)\./, "");
@@ -13,7 +17,7 @@
     host.innerHTML = `
         <div class="fins-prompt" role="dialog" aria-label="Finstracker">
             <div class="fins-prompt-head">
-                <img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt="" width="20" height="20">
+                ${iconUrl ? `<img src="${iconUrl}" alt="" width="20" height="20">` : ""}
                 <span class="fins-prompt-title">Finstracker</span>
                 <button class="fins-prompt-close" type="button" aria-label="Close">×</button>
             </div>
@@ -24,7 +28,10 @@
         </div>`;
     document.documentElement.appendChild(host);
     // Some sites redraw the whole page and drop anything added to it: put this back until it's closed.
-    const keep = new MutationObserver(() => { if (!host.isConnected) document.documentElement.appendChild(host); });
+    const keep = new MutationObserver(() => {
+        if (!alive()) { keep.disconnect(); host.remove(); return; } // this copy of the extension was replaced
+        if (!host.isConnected) document.documentElement.appendChild(host);
+    });
     keep.observe(document.documentElement, { childList: true });
     const root = host.firstElementChild;
     const body = root.querySelector(".fins-prompt-body");

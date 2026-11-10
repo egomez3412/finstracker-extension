@@ -194,8 +194,8 @@ try {
     log("status:", s.statusLabel || s.lastError, "| on", bank.url(), "| perks:", JSON.stringify(state.perks.map((x) => [x.id, x.used])));
     ok = s.status === "synced" && state.perks.find((x) => x.id === "p-uber").used && !state.perks.find((x) => x.id === "p-de").used;
   } else if (scenario === "activity") {
-    // First sync: baseline (no activity entries). Next sync: the new line is recorded with its
-    // description, and the balance change only covers the rest.
+    // First sync: every activity line is saved as history (dated, never changing the balance). Next
+    // sync: only the new line is sent. The balance moves with the balance sync alone.
     await sw.evaluate(() => chrome.storage.local.set({ portalOverrides: { c1: { matchUrl: "http://localhost:3000/*", selector: "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)", source: "user-picker" } }, rewardsPages: { c1: { url: "http://localhost:3000/bank/rewards", source: "user" } } }));
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
@@ -211,7 +211,11 @@ try {
     await waitFor((s) => s?.status === "synced", "second sync");
     await sleep(500);
     log("after second sync:", JSON.stringify(state.transactions.map((t) => [t.type, t.amount, t.note])), "points:", state.points, "| note:", await note(bank));
-    ok = state.transactions.length === 2 && state.transactions[1].note === "Nov 8 · Dining" && state.transactions[1].amount === 500 && state.points === 99265;
+    log("history:", JSON.stringify(state.history.map((h) => [h.date, h.description, h.points])));
+    const year = new Date().getFullYear();
+    ok = state.history.length === 4 && state.history.some((h) => h.description === "Dining" && h.points === 500 && /-11-08$/.test(h.date))
+      && state.history.some((h) => /Transfer to Delta/.test(h.description) && h.points === -5000)
+      && state.transactions.every((t) => /Synced with Finstracker Sync/.test(t.note)) && state.points === 99265 && year > 2000;
   } else if (scenario === "autopilot") {
     // One button: balance, then offers (added + saved), then benefits, in one tab.
     await sw.evaluate(() => chrome.storage.local.set({ portalOverrides: { c1: { matchUrl: "http://localhost:3000/*", selector: "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)", source: "user-picker" } }, rewardsPages: { c1: { url: "http://localhost:3000/bank/rewards", source: "user" } } }));
@@ -468,6 +472,47 @@ try {
     log("   after Find my cards:", after.slice(0, 160), "| switcher opened:", opensAfter, "| autopilot:", Boolean(run2.autopilotRun), "| cards added:", Object.keys(state.cards).length);
     ok = !started && opens1 === "0" && /Run autopilot/.test(popup1)
       && /Find my cards/.test(text) && opensBefore === "0" && /Finstracker found 3 cards/.test(after) && Number(opensAfter) >= 1 && !run2.autopilotRun && Object.keys(state.cards).length === 0;
+  } else if (scenario === "history") {
+    // Amex-style points activity: one table for every card on the Membership Rewards account, behind
+    // "Show More". Autopilot saves each line to the card in its card column (not the card that isn't
+    // in Finstracker); a second run only reads until it reaches lines already saved.
+    const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";
+    await sw.evaluate((path) => chrome.storage.local.set({
+      portalOverrides: Object.fromEntries(["c3", "c4"].map((id) => [id, { matchUrl: "http://localhost:3000/*", selector: path, source: "user-picker" }])),
+      rewardsPages: Object.fromEntries(["c3", "c4"].map((id) => [id, { url: "http://localhost:3000/bank/rewards", source: "user" }])),
+      cardLast4: { c3: "3001", c4: "1004" },
+    }), path);
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.evaluate(() => { document.cookie = "acct=c3; path=/"; }); // the site shows Gold
+    const runOnce = async (label) => {
+      await bank.goto("http://localhost:3000/bank/rewards"); await bank.bringToFront();
+      let popup = "";
+      for (let i = 0; i < 30 && !/Run autopilot/.test(popup); i++) { await sleep(500); popup = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | ") || "").catch(() => ""); }
+      await bank.click('#fins-prompt-root [data-act="run"]');
+      let run; const end = Date.now() + 240000; await sleep(1500);
+      let trace = "";
+      while (Date.now() < end) {
+        run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot", "captureSession"]));
+        if (process.env.DEBUG) { const c = run.captureSession; const line = `${run.autopilotRun?.cardName} ${run.autopilotRun?.step} | ${c?.cardId} ${c?.status} ${c?.statusLabel || ""} ${c?.lastError || ""} ${c?.currentUrl || ""} sw=${JSON.stringify(c?.switchResult || null)} ver=${c?.verified}`; if (line !== trace) { log("  ap:", line.slice(0, 260)); trace = line; } }
+        await bank.click('#fins-status-root [data-action="confirm"]', { timeout: 200 }).catch(() => {});
+        if (!run.autopilotRun) break;
+        await sleep(500);
+      }
+      log(label, "popup:", popup.replace(/Finstracker \| × \| /, "").slice(0, 200));
+      return { ...run, popup };
+    };
+    const run1 = await runOnce("run 1");
+    const first = { lines: state.history.length, clicks: state.moreClicks };
+    const per = (id) => state.history.filter((h) => h.cardId === id).length;
+    log("run 1: lines", first.lines, "| Show More presses", first.clicks, "| c4", per("c4"), "c3", per("c3"), "| results c4:", JSON.stringify(run1.autopilot?.c4?.results), "c3:", JSON.stringify(run1.autopilot?.c3?.results));
+    log("sample:", JSON.stringify(state.history.slice(0, 3).map((h) => [h.date, h.description, h.points, h.spend, h.status, h.multiplier])));
+    const run2 = await runOnce("run 2");
+    log("run 2: lines", state.history.length, "| Show More presses", state.moreClicks - first.clicks, "| points c4/c3:", state.cards.c4.currentPoints, state.cards.c3.currentPoints);
+    const redeem = state.history.find((h) => /POINTS FOR TRAVEL/.test(h.description));
+    ok = per("c4") === 5 && per("c3") === 4 && first.lines === 9 && first.clicks >= 2 && state.history.length === 9 && state.moreClicks - first.clicks === 0
+      && redeem?.points === -5000 && state.history.some((h) => h.status === "Pending" && h.spend > 0 && h.multiplier === "4X")
+      && /Not pulled yet/.test(run1.popup) && /(Last|All) pulled.*(just now|minute)/.test(run2.popup);
   } else if (scenario === "nologin") {
     // Amex cards with nothing saved but the bank's own settings (login page first in them), run from
     // a signed-in Amex page. Like Amex, loading the login page signs you out: autopilot must never

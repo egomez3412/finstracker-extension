@@ -123,8 +123,13 @@ async function loadSite(force = false) {
     const web = /^https?:/.test(url);
     const [r, p] = await Promise.all([web ? send({ type: "siteAdvice", url }) : null, web ? send({ type: "pageCards", url }) : null]);
     state.advice = r?.ok ? r.advice : null;
-    state.page = p?.ok ? { tabId: tab.id, url, site: p.site, bank: p.bank, cardIds: p.cardIds } : null;
+    state.page = p?.ok ? { tabId: tab.id, url, site: p.site, bank: p.bank, cardIds: p.cardIds, newCards: [] } : null;
     render();
+    // Cards the popup or autopilot already found on this tab that aren't in Finstracker yet.
+    if (state.page) {
+        const n = await send({ type: "pageNewCards", tabId: tab.id });
+        if (n?.ok && state.page?.tabId === tab.id) { state.page.newCards = n.newCards; render(); }
+    }
 }
 function loadAll() {
     loadCards();
@@ -258,6 +263,15 @@ function cardRow(card) {
 }
 
 /** Top of Your cards: autopilot for the cards on the site in the open tab, or linking cards to it. */
+/** Cards the open site lists that aren't in Finstracker yet, or a button to look for them. */
+function newCardsBlock(p) {
+    if (!p.bank && !p.cardIds.length) return "";
+    if (!p.newCards?.length) return `<div class="action-row"><button type="button" class="btn-ghost btn-small" data-act="find-new" ${state.findingNew ? "disabled" : ""}>${state.findingNew ? "Looking…" : "Find new cards on this site"}</button></div>`;
+    return `<div class="row-title">${p.newCards.length === 1 ? "A card here isn't" : `${p.newCards.length} cards here aren't`} in Finstracker yet</div>
+        <div class="link-list new-list">${p.newCards.map((c) => `<label class="link-item"><input type="checkbox" value="${esc(c.key)}" checked> ${esc(c.name)}${c.last4 ? ` <span class="row-sub">•••• ${esc(c.last4)}</span>` : ""}</label>`).join("")}</div>
+        <div class="action-row"><button type="button" class="btn-primary btn-small" data-act="add-site-cards">Add to Finstracker</button><button type="button" class="btn-ghost btn-small" data-act="ignore-site-cards">Not mine</button></div>`;
+}
+
 function pageBlock() {
     const p = state.page;
     if (!p || !state.cards?.length) return "";
@@ -273,11 +287,13 @@ function pageBlock() {
         return `<div class="page-block">
             <div class="row-main"><div class="row-title">On ${esc(p.site)}</div><div class="row-sub">${esc(here.map((c) => c.displayName).join(", "))}</div></div>
             <div class="action-row"><button type="button" class="btn-primary btn-small" data-act="run-autopilot-page" ${state.autopilotRun ? "disabled" : ""}>Run autopilot on this page</button><button type="button" class="btn-ghost btn-small" data-act="link-start">Change cards</button></div>
+            ${newCardsBlock(p)}
         </div>`;
     }
     return `<div class="page-block">
         <div class="row-main"><div class="row-title">${p.bank ? `${esc(p.site)} isn't linked to your cards yet` : `No cards linked to ${esc(p.site)}`}</div></div>
         <div class="action-row"><button type="button" class="${p.bank ? "btn-primary" : "btn-ghost"} btn-small" data-act="link-start">Link cards to this site</button></div>
+        ${newCardsBlock(p)}
     </div>`;
 }
 
@@ -491,6 +507,35 @@ const actions = {
         const r = await send({ type: "runAutopilot", cardIds: p.cardIds, tabId: p.tabId });
         if (!r.ok) toast(r.error || "Couldn't start autopilot", { kind: "error" });
         else { toast(`Autopilot started on ${p.site}`); try { await chrome.tabs.update(p.tabId, { active: true }); } catch { /* tab closed */ } }
+    },
+    async "find-new"() {
+        const p = state.page;
+        if (!p) return;
+        if (!(await ensureSiteAccess(p.url))) return toast(`Allow access to ${p.site} first`, { kind: "error" });
+        state.findingNew = true; render();
+        const r = await send({ type: "pageNewCards", tabId: p.tabId, find: true });
+        state.findingNew = false;
+        if (r?.ok && state.page === p) p.newCards = r.newCards;
+        render();
+        if (r?.ok && !r.newCards.length) toast(`No new cards on ${p.site}. Sign in there first if you haven't.`);
+        else if (!r?.ok) toast(r?.error || "Couldn't read the page", { kind: "error" });
+    },
+    async "add-site-cards"() {
+        const p = state.page;
+        const keys = [...app.querySelectorAll(".new-list input:checked")].map((i) => i.value);
+        if (!keys.length) return toast("Tick at least one card", { kind: "error" });
+        const r = await send({ type: "addSiteCards", tabId: p.tabId, keys });
+        if (!r?.ok) return toast(r?.error || "Couldn't add the cards", { kind: "error" });
+        toast(`Added ${r.added.map((c) => c.displayName).join(", ")}${r.failed?.length ? ` · couldn't add ${r.failed.join(", ")}` : ""}`);
+        await loadCards({ fresh: true });
+        loadSite(true);
+    },
+    async "ignore-site-cards"() {
+        const p = state.page;
+        const keys = (p?.newCards || []).map((c) => c.key);
+        await send({ type: "ignoreSiteCards", tabId: p.tabId, keys });
+        p.newCards = [];
+        render();
     },
     "link-start"() { state.linking = true; render(); },
     "link-cancel"() { state.linking = false; render(); },

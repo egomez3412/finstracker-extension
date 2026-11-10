@@ -556,6 +556,49 @@ try {
     const back = sw !== oldSw;
     ok = before.startsWith("1,") && before.split(",")[2] === "1" && afterReload === "0,0,0,0" && errors.length === 0
       && (!back || (fresh.startsWith("1,") && fresh.split(",").slice(1).every((n) => Number(n) <= 1)));
+  } else if (scenario === "newcards") {
+    // Signed in, the bank's card switcher lists two cards that aren't in Finstracker. The popup
+    // offers them; add one (it is created with the bank and its catalog card, linked to the site and
+    // joins the popup's cards), say "Not mine" to the other, and neither comes back.
+    state.newCard = true;
+    const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";
+    await sw.evaluate((path) => chrome.storage.local.set({
+      portalOverrides: Object.fromEntries(["c1", "c3", "c4"].map((id) => [id, { matchUrl: "http://localhost:3000/*", selector: path, source: "user-picker" }])),
+      rewardsPages: Object.fromEntries(["c1", "c3", "c4"].map((id) => [id, { url: "http://localhost:3000/bank/rewards", source: "user" }])),
+    }), path);
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/rewards");
+    await bank.waitForSelector("#fins-prompt-root .fins-prompt-new input[data-new]", { timeout: 20000 });
+    const newText = () => bank.evaluate(() => document.querySelector("#fins-prompt-root .fins-prompt-new")?.innerText.replace(/\n+/g, " | ") || "");
+    const offered = await newText();
+    await bank.screenshot({ path: `${SHOTS}/newcards-popup.png` });
+    // Add Delta only.
+    await bank.uncheck('#fins-prompt-root input[data-new][value="2008"]');
+    await bank.click('#fins-prompt-root [data-act="add-new"]');
+    const until = Date.now() + 15000;
+    while (Date.now() < until && !state.created.length) await sleep(300);
+    await sleep(3500); // the popup is redrawn with the new card, then the site is looked at again
+    const popupAfter = await bank.evaluate(() => document.querySelector("#fins-prompt-root .fins-prompt-body")?.innerText.replace(/\n+/g, " | ") || "");
+    const offeredAfter = await newText();
+    await bank.screenshot({ path: `${SHOTS}/newcards-added.png` });
+    // Hilton isn't mine.
+    if (await bank.$('#fins-prompt-root [data-act="ignore-new"]')) await bank.click('#fins-prompt-root [data-act="ignore-new"]');
+    await sleep(800);
+    await bank.reload(); await sleep(5000);
+    const offeredOnReload = await newText();
+    const st = await sw.evaluate(() => chrome.storage.local.get(["cardLast4", "ignoredSiteCards", "rewardsPages"]));
+    log("offered:", offered);
+    log("created:", JSON.stringify(state.created), "| popup after:", popupAfter, "| still offered:", offeredAfter);
+    log("after reload:", offeredOnReload || "(nothing)", "| numbers:", JSON.stringify(st.cardLast4), "| ignored:", JSON.stringify(st.ignoredSiteCards), "| n1 page:", st.rewardsPages?.n1?.url);
+    // The rewards page also lists Freedom Unlimited (...1234): a Chase cash back card, from the catalog.
+    const freedom = state.created.find((c) => c.displayName === "Freedom Unlimited");
+    ok = /Delta SkyMiles Gold Card/.test(offered) && /Hilton Honors Aspire/.test(offered) && /Freedom Unlimited/.test(offered) && !/Platinum|Sapphire|Blue Cash/.test(offered) && /Add cards/.test(offered)
+      && state.created.length === 2 && state.created[0].displayName === "Delta SkyMiles Gold Card" && state.created[0].issuer === "American Express" && state.created[0].rewardType === "points" && !state.created[0].cardKey
+      && freedom?.issuer === "Chase" && freedom?.rewardType === "cashback" && freedom?.cardKey === "chase-freedom-unlimited"
+      && /Delta SkyMiles Gold Card/.test(popupAfter) && /5 of your cards/.test(popupAfter) && /Hilton/.test(offeredAfter) && !/Delta|Freedom/.test(offeredAfter)
+      && !offeredOnReload && st.cardLast4?.n1 === "3004" && st.cardLast4?.c4 === "1004" && (st.ignoredSiteCards?.["http://localhost:3000"] || []).includes("2008")
+      && st.rewardsPages?.n1?.url === "http://localhost:3000/bank/rewards";
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

@@ -4,6 +4,7 @@
 (function () {
     const payload = window.__finsPromptPayload || {};
     if (window.__finsPromptInstance) { try { window.__finsPromptInstance.update(payload); } catch { /* replaced below */ } return; }
+    if (payload.update) return; // a late update for a popup the user already closed: don't reopen it
     // A popup left by an earlier copy of the extension (reloaded or updated): replace it.
     document.querySelectorAll("#fins-prompt-root").forEach((n) => n.remove());
     const alive = () => { try { return Boolean(chrome.runtime?.id); } catch { return false; } }; // false once the extension is reloaded or updated
@@ -22,6 +23,7 @@
                 <button class="fins-prompt-close" type="button" aria-label="Close">×</button>
             </div>
             <div class="fins-prompt-body"></div>
+            <div class="fins-prompt-new"></div>
             <div class="fins-prompt-actions"><button class="fins-prompt-btn fins-prompt-primary" type="button" data-act="run">Run autopilot</button></div>
             <div class="fins-prompt-one"></div>
             <p class="fins-prompt-status" aria-live="polite"></p>
@@ -36,6 +38,7 @@
     const root = host.firstElementChild;
     const body = root.querySelector(".fins-prompt-body");
     const one = root.querySelector(".fins-prompt-one");
+    const fresh = root.querySelector(".fins-prompt-new");
     const status = root.querySelector(".fins-prompt-status");
     const runBtn = root.querySelector("[data-act='run']");
     let current = payload;
@@ -52,12 +55,20 @@
         // None of the user's cards is linked to this bank's site yet: ask which ones use it.
         const all = current.allCards || [];
         body.innerHTML = `Which of your cards use <strong>${esc(site)}</strong>? Finstracker will remember them for this site.
-            <div class="fins-prompt-checks">${all.map((c) => `<label><input type="checkbox" value="${esc(c.id)}"> ${esc(c.displayName)}</label>`).join("")}</div>`;
+            <div class="fins-prompt-checks">${all.map((c) => `<label><input type="checkbox" value="${esc(c.id)}"${(current.preselect || []).includes(c.id) ? " checked" : ""}> ${esc(c.displayName)}</label>`).join("")}</div>`;
         runBtn.textContent = "Save and run autopilot";
         runBtn.dataset.act = "link-run";
         one.innerHTML = `<div class="fins-prompt-actions"><button class="fins-prompt-btn" type="button" data-act="link">Save</button></div>`;
     }
+    // Cards the site lists that aren't in Finstracker yet: add them (checked by default) or hide them.
+    function renderNew() {
+        const list = current.newCards || [];
+        fresh.innerHTML = list.length ? `<div class="fins-prompt-newhead">${list.length === 1 ? "A card" : `${list.length} cards`} on ${esc(site)} ${list.length === 1 ? "isn't" : "aren't"} in Finstracker yet</div>
+            <div class="fins-prompt-checks">${list.map((c) => `<label><input type="checkbox" data-new value="${esc(c.key)}" checked> ${esc(c.name)}${c.last4 ? ` <span class="fins-prompt-mask">•••• ${esc(c.last4)}</span>` : ""}</label>`).join("")}</div>
+            <div class="fins-prompt-actions"><button class="fins-prompt-btn" type="button" data-act="add-new">${list.length === 1 ? "Add card" : "Add cards"}</button><button class="fins-prompt-btn fins-prompt-quiet" type="button" data-act="ignore-new">Not mine</button></div>` : "";
+    }
     function render() {
+        renderNew();
         if (current.mode === "link") return renderLink();
         runBtn.dataset.act = "run";
         const cards = cardsHere();
@@ -91,6 +102,20 @@
         const btn = e.target.closest("[data-act]");
         if (!btn || btn.disabled) return;
         const act = btn.dataset.act;
+        if (act === "add-new" || act === "ignore-new") {
+            const boxes = [...fresh.querySelectorAll("input[data-new]")];
+            const keys = (act === "add-new" ? boxes.filter((b) => b.checked) : boxes).map((b) => b.value);
+            if (!keys.length) { setStatus("Tick at least one card", "error"); return; }
+            busy(true);
+            setStatus(act === "add-new" ? `Adding ${keys.length === 1 ? "the card" : `${keys.length} cards`}…` : "", act === "add-new" ? "busy" : "");
+            const r = await send({ type: act === "add-new" ? "addSiteCards" : "ignoreSiteCards", keys });
+            busy(false);
+            if (r?.ok === false) { setStatus(r.error || "Couldn't add the cards", "error"); return; }
+            if (act === "add-new") setStatus(`Added ${r.added.map((c) => c.displayName).join(", ")}${r.failed?.length ? ` · couldn't add ${r.failed.join(", ")}` : ""}`, "ok");
+            current = { ...current, newCards: (current.newCards || []).filter((c) => !keys.includes(c.key)) };
+            renderNew();
+            return; // the popup is redrawn with the added cards
+        }
         if (act === "link" || act === "link-run") {
             const ids = [...body.querySelectorAll("input[type=checkbox]:checked")].map((i) => i.value);
             if (!ids.length) { setStatus("Tick at least one card", "error"); return; }
@@ -124,7 +149,7 @@
     });
 
     window.__finsPromptInstance = {
-        update(next) { current = next || current; render(); setStatus("", ""); busy(false); },
+        update(next) { const { update, ...rest } = next || {}; current = update ? { ...current, ...rest } : rest; render(); if (!update) { setStatus("", ""); busy(false); } },
     };
     render();
     requestAnimationFrame(() => root.classList.add("fins-show"));

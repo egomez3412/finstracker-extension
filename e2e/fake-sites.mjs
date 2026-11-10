@@ -23,6 +23,8 @@ export function startServer({ port = 3000 } = {}) {
             { id: "p-saks", cardId: "c1", title: "Saks Fifth Avenue Credit · H2", valueCents: 5000, deadline: endOfMonth(), used: false },
         ],
         offers: [],
+        newCard: false, // the switcher also lists a card the user hasn't added to Finstracker
+        created: [],
         get points() { return this.cards.c1.currentPoints; },
     };
     const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'";
@@ -38,6 +40,15 @@ export function startServer({ port = 3000 } = {}) {
         if (p.startsWith("/api/")) {
             if (req.headers.authorization !== "Bearer test-token") return json(res, null, 401);
             const [, , group, id, action] = p.split("/");
+            if (group === "cards" && !id && req.method === "POST") {
+                const b = await readBody(req);
+                if (!b.displayName || !b.issuer || !["points", "cashback"].includes(b.rewardType)) return json(res, { fields: { displayName: "required" } }, 400);
+                if (b.cardKey && !/^[a-z0-9-]+$/.test(b.cardKey)) return json(res, { fields: { cardKey: "Unknown card key" } }, 400);
+                const card = { id: `n${state.created.length + 1}`, displayName: b.displayName, issuer: b.issuer, rewardType: b.rewardType, cardKey: b.cardKey || null, currentPoints: 0, currentCashBack: 0, pointValueCents: 1, multipliers: {}, program: b.rewardType === "cashback" ? "Cash back" : `${b.issuer} points` };
+                state.cards[card.id] = card;
+                state.created.push(b);
+                return json(res, card, 201);
+            }
             if (group === "cards" && !id) return json(res, Object.values(state.cards));
             if (group === "cards" && id && req.method === "GET") return state.cards[id] ? json(res, state.cards[id]) : json(res, null, 404);
             if (group === "cards" && id && req.method === "PUT") {
@@ -78,7 +89,7 @@ export function startServer({ port = 3000 } = {}) {
             const el = (tag, text, style) => { const n = document.createElement(tag); if (text) n.textContent = text; if (style) n.style.cssText = style; return n; };
             const tile = (lines) => { const d = el("div"); d.className = "tile"; for (const [t, big] of lines) d.append(el("div", t, big ? "font-size:28px" : "")); return d; };
             const more = location.search.includes("more");
-            const ACCOUNTS = { c1: ["Sapphire Preferred (...9876)", "OQX90"], c3: ["Gold Card (...3001)", "GLD31"], c4: ["The Platinum Card® (...1004)", "PLT04"] };
+            const ACCOUNTS = { c1: ["Sapphire Preferred (...9876)", "OQX90"], c3: ["Gold Card (...3001)", "GLD31"], c4: ["The Platinum Card® (...1004)", "PLT04"]${state.newCard ? ', c9: ["Delta SkyMiles® Gold Card (...3004)", "DLT04"], c8: ["Hilton Honors Aspire Card (...2008)", "HLT08"]' : ""} };
             const acct = (document.cookie.match(/acct=(c[0-9])/) || [])[1] || "c1";
             function switcher() {
                 const h = el("header"); h.id = "acct";

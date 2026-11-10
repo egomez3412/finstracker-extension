@@ -44,6 +44,8 @@
             .ic.error { background: #a32424; }
             .ic.skipped { background: #c4bba6; }
             @keyframes spin { to { transform: rotate(360deg); } }
+            .notice { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: #f3f4f0; font-size: 12px; }
+            .notice button { all: unset; display: block; margin-top: 6px; color: #087487; font-weight: 600; cursor: pointer; }
             .actions { display: flex; gap: 6px; margin-top: 10px; }
             .actions button { all: unset; flex: 1; text-align: center; height: 32px; line-height: 32px; border: 1px solid #e5e8e1; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; }
             .actions button:hover { border-color: #c4bba6; }
@@ -54,6 +56,8 @@
                 .card { border-top-color: #3c4940; }
                 .step span, .x { color: #aebcb2; }
                 .actions button { border-color: #3c4940; }
+                .notice { background: #2c3530; }
+                .notice button { color: #8bd5e5; }
             }
             @media (prefers-reduced-motion: reduce) { .ic.busy { animation: none; } }
         </style><div class="wrap"></div>`;
@@ -65,6 +69,16 @@
                 btn.disabled = true;
                 btn.textContent = "Stopping…";
                 try { chrome.runtime.sendMessage({ type: "stopAutopilot" }).catch(() => {}); } catch { /* extension reloaded */ }
+            }
+            if (btn.dataset.act === "add-new") {
+                btn.disabled = true;
+                btn.textContent = "Adding…";
+                const keys = last?.notice?.keys || [];
+                try {
+                    chrome.runtime.sendMessage({ type: "addSiteCards", keys }).then((r) => {
+                        if (r?.ok === false && last?.notice) { last = { ...last, notice: { text: r.error || "Couldn't add the cards", keys } }; render(); }
+                    }).catch(() => {});
+                } catch { /* extension reloaded */ }
             }
             if (btn.dataset.act === "collapse") { collapsed = true; render(); }
             if (btn.dataset.act === "expand") { collapsed = false; render(); }
@@ -93,6 +107,7 @@
             <div class="head">${icon}<span class="title">${esc(last.title)}</span><button class="x" data-act="${last.running ? "collapse" : "close"}" aria-label="${last.running ? "Minimize" : "Close"}">${last.running ? "–" : "×"}</button></div>
             ${cards.map((c) => `<div class="card"><div class="name">${esc(c.name)}${c.current ? "<small>now</small>" : ""}</div>
                 ${(c.steps || []).map((s) => `<div class="step"><i class="ic ${esc(s.state)}" aria-hidden="true"></i><b>${esc(s.name)}</b><span>${esc(s.text || (s.state === "waiting" ? "Waiting" : ""))}</span></div>`).join("")}</div>`).join("")}
+            ${last.notice?.text ? `<div class="notice">${esc(last.notice.text)}${last.notice.keys?.length ? '<button data-act="add-new">Add to Finstracker</button>' : ""}</div>` : ""}
             <div class="actions">${last.running ? '<button data-act="stop">Stop autopilot</button>' : '<button data-act="close">Close</button>'}</div>
         </div>`;
     }

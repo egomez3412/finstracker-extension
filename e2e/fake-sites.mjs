@@ -113,8 +113,50 @@ export function startServer({ port = 3000 } = {}) {
                 }
                 return n;
             }
+            function amexNav() {
+                const n = el("nav");
+                for (const [href, text] of [["/bank/amex-home", "Home"], ["/bank/help", "Statements & Activity"], ["/bank/amex-hub", "Rewards & Benefits"]]) { const a = el("a", text); a.href = href; n.append(a, " "); }
+                const menu = el("button", "Earn and Redeem"); menu.setAttribute("aria-expanded", "false");
+                menu.addEventListener("click", () => { document.body.dataset.menu = "opened"; });
+                n.append(menu);
+                return n;
+            }
+            function amexHub(root) {
+                const activity = location.pathname === "/bank/amex-hub/activity";
+                const tabs = el("div"); tabs.setAttribute("role", "tablist");
+                for (const [text, path] of [["Browse Benefits", "/bank/amex-hub"], ["View Benefits Activity", "/bank/amex-hub/activity"]]) {
+                    const t = el("button", text); t.setAttribute("role", "tab"); t.setAttribute("aria-selected", String(location.pathname === path));
+                    t.addEventListener("click", () => { history.pushState({}, "", path); setTimeout(draw, 600); });
+                    tabs.append(t);
+                }
+                root.append(el("h2", "Explore Benefits"), tabs);
+                if (!activity) {
+                    // Browse: what each benefit is, no usage.
+                    for (const [name, text] of [["$200 Uber Cash", "Get up to $15 in Uber Cash each month when you add your card to your Uber account."], ["$300 Digital Entertainment Credit", "Get up to $25 back each month on eligible subscriptions. Enrollment required."]]) {
+                        const t = el("section"); t.className = "benefit"; t.append(el("h3", name), el("p", text), el("button", "Learn More")); root.append(t);
+                    }
+                    return;
+                }
+                root.append(el("h2", "Track Progress"), el("p", "Trackers may not reflect recent activity."));
+                for (const lines of [
+                    ["$200 Uber Cash", "Earned this Year $150.00", "$15 Earned Nov", "$0 To Go", "Get up to $15 in Uber Cash each month."],
+                    ["$300 Digital Entertainment Credit", "Earned this Year $100.00", "$5 Earned Nov", "$20 To Go", "Receive up to $25 back each month."],
+                    ["$209 CLEAR Plus Credit (formerly the $189 CLEAR Credit)", "$209 Earned", "$0 To Go", "Get up to $209 back per calendar year on CLEAR Plus."],
+                    ["Centurion Lounge Guest Access", "$1,000 spent", "$74,000 To Go", "Spend $75,000 in eligible purchases to unlock guest access."],
+                ]) {
+                    const t = el("div"); t.className = "tracker"; t.append(el("h3", lines[0]));
+                    for (const l of lines.slice(1)) t.append(el("p", l));
+                    root.append(t);
+                }
+            }
             var draw = function () {
                 const root = document.getElementById("root");
+                if (location.pathname.startsWith("/bank/amex-home") || location.pathname.startsWith("/bank/amex-hub")) {
+                    root.replaceChildren(amexNav());
+                    if (location.pathname === "/bank/amex-home") root.append(tile([["Platinum Card® (...1004)"], ["Membership Rewards® Points"], ["150,000", true]]), el("p", "Statement balance $1,240.18"));
+                    else amexHub(root);
+                    return;
+                }
                 root.replaceChildren(nav());
                 if (location.pathname !== "/bank/dashboard") root.append(switcher());
                 if (location.pathname === "/bank/dashboard") {
@@ -151,14 +193,18 @@ export function startServer({ port = 3000 } = {}) {
                     const decoy = el("button", "Add card"); decoy.addEventListener("click", () => { document.body.dataset.decoy = "clicked"; });
                     root.append(decoy);
                     const all = [["Best Buy", "Spend $100, get $15 back"], ["Uber Eats", "Earn 1,000 Membership Rewards® points"], ["Hilton", "Earn +3X points"], ["Dell", "$10 statement credit"], ["Audible", "Get $20 back"],
-                        ["Saks", "10% back"], ["Hotels.com", "Earn 2,500 Membership Rewards points"], ["Lyft", "Spend $25, get $5 back"]];
+                        ["Saks", "10% back"], ["Hotels.com", "Earn 2,500 Membership Rewards points"], ["Lyft", "Spend $25, get $5 back"],
+                        ["Duolingo", "Spend $75 or more, earn $30"], ["Glasses.com", "Earn +2 Membership Rewards® points per eligible dollar spent, up to 4,000 pts"]];
                     const state = window.__offers || (window.__offers = { shown: 5, added: new Set(), flaky: true });
                     const list = el("div"); list.id = "offer-list";
                     const drawList = () => {
                         list.replaceChildren();
                         for (const [merchant, badge] of all.slice(0, state.shown)) {
                             const t = tile([[merchant], [badge], ["Expires Dec 31, 2026"]]);
-                            const b = el("button", state.added.has(merchant) ? "Added to Card" : "Add to Card");
+                            // Amex's newer tiles: an icon button with only a title.
+                            const icon = /Duolingo|Glasses/.test(merchant) && !state.added.has(merchant);
+                            const b = el("button", state.added.has(merchant) ? "Added to Card" : icon ? "" : "Add to Card");
+                            if (icon) { b.title = "add to list card"; b.append(el("span", "+")); b.firstChild.setAttribute("aria-hidden", "true"); b.style.cssText = "width:28px;height:28px"; }
                             b.addEventListener("click", () => {
                                 if (merchant === "Uber Eats" && state.flaky) { state.flaky = false; return; } // first click lost
                                 setTimeout(() => { state.added.add(merchant); drawList(); }, 300); // the whole list redraws
@@ -203,7 +249,7 @@ export function startServer({ port = 3000 } = {}) {
             setTimeout(draw, 1200);`, h);
         if (p === "/bank/login" && req.method === "POST") { res.writeHead(302, { location: "/bank/dashboard", "set-cookie": "bank=1; Path=/" }); return res.end(); }
         const signedIn = /(^|;\s*)bank=1/.test(req.headers.cookie || "");
-        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance"];
+        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance", "/bank/amex-home", "/bank/amex-hub", "/bank/amex-hub/activity"];
         if (pages.includes(p) && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }
         if (p === "/bank/login") return send(res, 200, "text/html", page("Sign in", `<form method="post" action="/bank/login"><input name="user" autocomplete="username"><input type="password" name="pw"><button>Sign in</button></form>`), h);
         if (p === "/bank/rewards") h["content-security-policy"] = `${csp}; require-trusted-types-for 'script'`;

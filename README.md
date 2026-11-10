@@ -64,7 +64,9 @@ On a card site, the Finstracker popup names your cards that use the site ("3 of 
 
 1. **Balance**: points, or cash back for cash back cards (Amex "Reward Dollars", Discover "Cashback Bonus", "cash back"), plus new **points activity** lines ("Nov 8 · Dining · +500 pts") recorded as their own entries. The first read of a card only notes what is already there, so nothing is counted twice.
 2. **Offers**: clicks **Add to Card** on every offer tile (only inside offer tiles, never page buttons like "Add card"), then saves all offers to that card in Finstracker, marking the ones on the card. Banks without a known offers page are reached through their own "Offers" link.
-3. **Benefits**: reads the benefits page ("Uber Cash · $10 of $10 used", "$0 remaining", "Completed") and marks the matching credits used in Finstracker.
+3. **Benefits**: reads the benefits page ("Uber Cash · $10 of $10 used", "$0 remaining", "Completed", Amex's "$200 Uber Cash · $15 Earned Nov · $0 To Go") and marks the matching credits used in Finstracker.
+
+**Clicking around the site.** When the page it opens doesn't show what it needs, autopilot clicks through the site the way you would, up to four links or tabs per step: for benefits, the Benefits link and then the tab with usage ("View Benefits Activity", "Track progress"); for offers, the Offers link and the list of offers you can still add ("Eligible offers"). If a page only lists offers already on the card, those are saved and it moves on to the ones it can still add. Tabs already selected and links already tried are skipped, and the site's menus and card switcher are never opened by accident. On Amex it goes straight to Benefits Activity, where usage lives, and reads every offer wording Amex uses ("Spend $75 or more, earn $30", "Earn +2 Membership Rewards® points per eligible dollar").
 
 Turn on **Daily autopilot** on a card and **Settings › Daily autopilot when signed in**, and it runs by itself once a day in a background tab while you are signed in to the card's site. A background run never waits: if a page needs a sign-in or your OK, it notes that and moves on.
 
@@ -132,8 +134,9 @@ npm run e2e -- autopilot # balance, offers and benefits from one button
 npm run e2e -- quicktab  # close the prompt, drag the tab, sync from its menu
 npm run e2e -- portal    # three cards on one site with a card switcher, autopilot from the popup
 npm run e2e -- viewing   # the page shows Platinum: popup, Sync this page, Read this tab and autopilot follow it
-npm run e2e -- addall    # Amex-style offers: new formats, redrawn list, Load more, a lost click; all 8 added
+npm run e2e -- addall    # Amex-style offers: new formats ("Spend $75 or more, earn $30", icon-only add buttons), redrawn list, Load more, a lost click; all 10 added
 npm run e2e -- amexbenefits # benefits behind "View details"; each benefit reported with what happened
+npm run e2e -- amextabs  # Amex layout: home → Rewards & Benefits → View Benefits Activity tab; "$200 Uber Cash · $0 To Go"; menus left closed
 npm run e2e -- noise     # © 2026, phone numbers, dates: never read or picked as a balance
 npm run e2e -- stop      # Stop mid-run: tabs close, nothing more saved, a new run starts; a leftover run is cleared
 npm run e2e -- reload    # extension reloaded with its popup and board on the page: the old ones go, no errors

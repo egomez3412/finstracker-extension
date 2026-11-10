@@ -5,17 +5,24 @@
     if (window.__finsStatus) return;
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     let host = null, root = null, hideTimer = 0, keep = null;
+    const alive = () => { try { return Boolean(chrome.runtime?.id); } catch { return false; } }; // false once the extension is reloaded or updated
+    let iconUrl = "";
+    try { iconUrl = chrome.runtime.getURL("icons/icon-48.png"); } catch { /* extension reloaded */ }
 
     function mount() {
         if (host?.isConnected) return;
         keep?.disconnect();
         host?.remove();
+        document.querySelectorAll("#fins-status-root").forEach((n) => n.remove()); // left by an earlier copy
         host = document.createElement("div");
         host.id = "fins-status-root";
         host.innerHTML = '<div class="fins-prompt fins-status" role="status" aria-live="polite"></div>';
         document.documentElement.appendChild(host);
         // Some sites redraw the whole page: put the note back until it's hidden.
-        keep = new MutationObserver(() => { if (host && !host.isConnected) document.documentElement.appendChild(host); });
+        keep = new MutationObserver(() => {
+            if (!alive()) { keep?.disconnect(); host?.remove(); return; } // this copy of the extension was replaced
+            if (host && !host.isConnected) document.documentElement.appendChild(host);
+        });
         keep.observe(document.documentElement, { childList: true });
         root = host.firstElementChild;
         root.addEventListener("click", (event) => {
@@ -46,7 +53,7 @@
         const busy = state.kind === "busy";
         root.innerHTML = `
             <div class="fins-prompt-head">
-                <img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt="" width="20" height="20">
+                ${iconUrl ? `<img src="${iconUrl}" alt="" width="20" height="20">` : ""}
                 <span class="fins-prompt-title">Finstracker</span>
                 <button class="fins-prompt-close" type="button" aria-label="Close" data-action="close">×</button>
             </div>

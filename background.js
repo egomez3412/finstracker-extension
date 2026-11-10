@@ -11,7 +11,7 @@ import { onExternalMessage } from "./lib/worker/auth-bridge.js";
 import { onTabClosed, processTab } from "./lib/worker/capture.js";
 import { onMessage } from "./lib/worker/router.js";
 import { forgetTabHints, onTabVisited } from "./lib/worker/site-hints.js";
-import { redrawBoard } from "./lib/worker/autopilot.js";
+import { clearStaleRun, redrawBoard } from "./lib/worker/autopilot.js";
 
 async function onNavigated(tabId, url, finished) {
     if (!finished) return; // read pages once they have loaded, not while they unload
@@ -57,6 +57,8 @@ chrome.runtime.onInstalled.addListener(async () => {
 // The toolbar icon opens the side panel, which stays open across navigation and sign-in.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 stayOnProduction();
+// A run saved before this worker started can no longer finish: mark it stopped.
+clearStaleRun().catch(() => {});
 
 /**
  * Finstracker always talks to finstracker.com. Early builds switched to any server answering on

@@ -15,12 +15,20 @@
     let open = false;
     let message = "";
 
+    // A tab left by an earlier copy of the extension (reloaded or updated): replace it.
+    document.querySelectorAll("#fins-launcher-root").forEach((n) => n.remove());
+    const alive = () => { try { return Boolean(chrome.runtime?.id); } catch { return false; } }; // false once the extension is reloaded or updated
+    let iconUrl = "";
+    try { iconUrl = chrome.runtime.getURL("icons/icon-48.png"); } catch { /* extension reloaded */ }
     const host = document.createElement("div");
     host.id = "fins-launcher-root";
     Object.assign(host.style, { position: "fixed", inset: "0", zIndex: "2147483645", pointerEvents: "none" });
     document.documentElement.appendChild(host);
     // Some sites redraw the whole page and drop anything added to it: put this back until it's closed.
-    const keep = new MutationObserver(() => { if (!host.isConnected) document.documentElement.appendChild(host); });
+    const keep = new MutationObserver(() => {
+        if (!alive()) { keep.disconnect(); host.remove(); return; } // this copy of the extension was replaced
+        if (!host.isConnected) document.documentElement.appendChild(host);
+    });
     keep.observe(document.documentElement, { childList: true });
     const shadow = host.attachShadow({ mode: "closed" });
     shadow.innerHTML = `<style>
@@ -56,7 +64,7 @@
             .sep { background: #3c4940; }
         }
     </style>
-    <div class="tab right" role="button" tabindex="0" aria-label="Finstracker quick actions" title="Finstracker · drag to move"><img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt=""></div>
+    <div class="tab right" role="button" tabindex="0" aria-label="Finstracker quick actions" title="Finstracker · drag to move">${iconUrl ? `<img src="${iconUrl}" alt="">` : ""}</div>
     <div class="menu" role="dialog" aria-label="Finstracker" hidden></div>`;
     const tab = shadow.querySelector(".tab");
     const menu = shadow.querySelector(".menu");
@@ -76,7 +84,7 @@
         const card = selectedCard();
         const unit = card?.rewardType === "cashback" ? "cash back" : "points";
         menu.innerHTML = `
-            <div class="head"><img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt="" width="18" height="18"><span>Finstracker</span><button type="button" class="x" data-act="close" aria-label="Close">×</button></div>
+            <div class="head">${iconUrl ? `<img src="${iconUrl}" alt="" width="18" height="18">` : ""}<span>Finstracker</span><button type="button" class="x" data-act="close" aria-label="Close">×</button></div>
             ${cards.length > 1 ? `<select aria-label="Card">${cards.map((c) => `<option value="${esc(c.id)}"${c.id === card?.id ? " selected" : ""}>${esc(c.displayName)}${c.id === currentId ? " (on screen)" : ""}</option>`).join("")}</select>` : card ? `<div class="muted" style="margin:0 2px 8px">${esc(card.displayName)}</div>` : ""}
             ${card ? `
                 <button type="button" class="item primary" data-act="sync">Sync ${unit} <small>from this page</small></button>

@@ -469,6 +469,93 @@ try {
     ok = !popupBefore && /Link cards to this site/.test(blockBefore || "") && /Run autopilot for all cards/.test(foot || "") && /Add cards/.test(foot || "")
       && /Run autopilot on this page/.test(blockAfter || "") && /Sapphire/.test(blockAfter || "") && /Gold/.test(blockAfter || "")
       && /2 cards/.test(popup || "") && state.cards.c1.currentPoints === 98765 && state.cards.c3.currentPoints === 45000 && ctx.pages().length === pagesBefore2;
+  } else if (scenario === "stop") {
+    // Stop in the middle of a three-card run: the background tabs close, the board says stopped,
+    // nothing more is saved, and a new run starts. A run left over from a restart is cleared too.
+    const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";
+    await sw.evaluate((path) => chrome.storage.local.set({
+      portalOverrides: Object.fromEntries(["c1", "c3"].map((id) => [id, { matchUrl: "http://localhost:3000/*", selector: path, source: "user-picker" }])),
+      rewardsPages: Object.fromEntries(["c1", "c3"].map((id) => [id, { url: "http://localhost:3000/bank/rewards", source: "user" }])),
+    }), path);
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/rewards"); await sleep(2000);
+    const runState = () => sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilotLastBoard"]));
+    const tabId = await panel.evaluate(async () => (await chrome.tabs.query({})).find((t) => t.url.includes("/bank/rewards")).id);
+    const pagesBefore = ctx.pages().length;
+    await panel.evaluate((tabId) => chrome.runtime.sendMessage({ type: "runAutopilot", cardIds: ["c1", "c3"], tabId }), tabId);
+    // Wait until offers and benefits are under way in their background tabs.
+    const until = Date.now() + 60000;
+    while (Date.now() < until && ctx.pages().length < pagesBefore + 2) await sleep(300);
+    const sideOpen = ctx.pages().length - pagesBefore;
+    await sleep(800);
+    await panel.evaluate(() => chrome.runtime.sendMessage({ type: "stopAutopilot" }));
+    const t0 = Date.now();
+    let r = await runState();
+    while (r.autopilotRun && Date.now() - t0 < 15000) { await sleep(300); r = await runState(); }
+    const stoppedIn = Date.now() - t0;
+    await sleep(6000); // nothing comes back after a stop
+    const later = await runState();
+    const boardText = await bank.evaluate(() => document.getElementById("fins-board-root")?.shadowRoot?.textContent || document.getElementById("fins-board-root")?.textContent || "");
+    log("side tabs opened:", sideOpen, "| stopped in", stoppedIn, "ms | run after 6s:", JSON.stringify(later.autopilotRun), "| last board:", later.autopilotLastBoard?.title, "| tabs:", pagesBefore, ctx.pages().length, "| c3 points:", state.cards.c3.currentPoints);
+    // A run left in storage by a restarted worker: Stop clears it, and a new run starts.
+    await sw.evaluate(() => chrome.storage.local.set({ autopilotRun: { id: "old", running: true, board: { running: true, title: "Autopilot · 1 card", cards: [] }, boardTab: null } }));
+    const again = await panel.evaluate((tabId) => chrome.runtime.sendMessage({ type: "runAutopilot", cardIds: ["c1"], tabId }), tabId);
+    await sleep(1500);
+    const second = await runState();
+    log("new run after a stale one:", JSON.stringify(again), "| id:", second.autopilotRun?.id);
+    await panel.evaluate(() => chrome.runtime.sendMessage({ type: "stopAutopilot" }));
+    let s3 = await runState(); const t1 = Date.now();
+    while (s3.autopilotRun && Date.now() - t1 < 15000) { await sleep(300); s3 = await runState(); }
+    log("second stop:", s3.autopilotRun ? "still running" : "stopped", "| board:", s3.autopilotLastBoard?.title);
+    ok = sideOpen >= 2 && stoppedIn < 12000 && !later.autopilotRun && later.autopilotLastBoard?.title === "Autopilot stopped" && ctx.pages().length === pagesBefore
+      && state.cards.c3.currentPoints === 0 && Boolean(second.autopilotRun?.id) && second.autopilotRun.id !== "old" && !s3.autopilotRun;
+  } else if (scenario === "reload") {
+    // The extension is reloaded (or updated) while its popup and board are on the page: the old
+    // copies remove themselves, the new copy draws one of each, and nothing is logged as an error.
+    const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";
+    await sw.evaluate((path) => chrome.storage.local.set({
+      portalOverrides: { c1: { matchUrl: "http://localhost:3000/*", selector: path, source: "user-picker" } },
+      rewardsPages: { c1: { url: "http://localhost:3000/bank/rewards", source: "user" } },
+    }), path);
+    bank = await ctx.newPage();
+    const errors = [];
+    bank.on("console", (m) => { if (m.type() === "error" && /fins|context invalidated|chrome-extension/i.test(m.text())) errors.push(m.text()); });
+    bank.on("pageerror", (e) => errors.push(String(e)));
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/rewards"); await sleep(2500);
+    const count = () => bank.evaluate(() => ["fins-prompt-root", "fins-launcher-root", "fins-board-root", "fins-status-root"].map((id) => document.querySelectorAll(`#${id}`).length).join(","));
+    // Put a board up too (as autopilot does), then reload the extension.
+    await sw.evaluate(async () => {
+      const [t] = (await chrome.tabs.query({})).filter((x) => x.url.includes("/bank/rewards"));
+      await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ["content/progress.js"] });
+      await chrome.scripting.executeScript({ target: { tabId: t.id }, func: () => window.__finsBoard.show({ running: true, title: "Autopilot · 1 card", cards: [{ name: "Sapphire Preferred", current: true, steps: [{ name: "Balance", state: "busy", text: "" }] }] }) });
+    });
+    await sleep(500);
+    const before = await count();
+    const oldSw = sw;
+    await sw.evaluate(() => chrome.runtime.reload()).catch(() => {});
+    const swUntil = Date.now() + 15000;
+    while (Date.now() < swUntil && (sw === oldSw || !sw)) {
+      await sleep(300);
+      sw = ctx.serviceWorkers().find((w) => w !== oldSw && w.url().includes(extId)) || sw;
+    }
+    log("new service worker:", sw !== oldSw, "| workers:", ctx.serviceWorkers().length);
+    await sleep(1500);
+    // The page redraws: the old copies notice they were replaced and go.
+    await bank.evaluate(() => { const i = document.createElement("i"); document.documentElement.appendChild(i); i.remove(); });
+    await sleep(500);
+    const afterReload = await count();
+    // Click Stop on anything left (nothing should be): no error either way.
+    // The page loads again with the new copy: one popup.
+    await bank.reload(); await sleep(3000);
+    const fresh = await count();
+    log("prompt,launcher,board,status before:", before, "| after the reload:", afterReload, "| after the page reloads:", fresh, "| errors:", JSON.stringify(errors));
+    // Test Chromium doesn't load an unpacked extension back after chrome.runtime.reload(); when it
+    // does, the page must show exactly one new popup.
+    const back = sw !== oldSw;
+    ok = before.startsWith("1,") && before.split(",")[2] === "1" && afterReload === "0,0,0,0" && errors.length === 0
+      && (!back || (fresh.startsWith("1,") && fresh.split(",").slice(1).every((n) => Number(n) <= 1)));
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

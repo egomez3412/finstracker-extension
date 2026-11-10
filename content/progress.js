@@ -1,6 +1,8 @@
 /* Finstracker autopilot board, on the portal page where autopilot was started: one block per card
  * with its activities (balance, offers, benefits) and where each one stands. Offers and benefits run
- * in their own windows at the same time; this board shows all of it in one place.
+ * in background tabs at the same time; this board shows all of it in one place.
+ * After the extension is reloaded, a board left by the old copy removes itself; the new copy
+ * replaces any it finds.
  * Shown and updated with window.__finsBoard.show(board); buttons send { type: "stopAutopilot" }.
  * board: { running, title, cards: [{ name, current, steps: [{ name, state, text }] }] }
  *   state: "waiting" | "busy" | "done" | "error" | "skipped" */
@@ -9,9 +11,13 @@
     if (window.top !== window.self) return;
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     let host = null, root = null, collapsed = false, last = null, keep = null;
+    const alive = () => { try { return Boolean(chrome.runtime?.id); } catch { return false; } }; // false once the extension is reloaded or updated
+    let iconUrl = "";
+    try { iconUrl = chrome.runtime.getURL("icons/icon-48.png"); } catch { /* extension reloaded */ }
 
     function mount() {
         if (host?.isConnected) return;
+        document.querySelectorAll("#fins-board-root").forEach((n) => n.remove()); // left by an earlier copy
         host = document.createElement("div");
         host.id = "fins-board-root";
         Object.assign(host.style, { position: "fixed", top: "16px", right: "16px", zIndex: "2147483646" });
@@ -55,34 +61,44 @@
         root.addEventListener("click", (e) => {
             const btn = e.target.closest("[data-act]");
             if (!btn) return;
-            if (btn.dataset.act === "stop") { try { chrome.runtime.sendMessage({ type: "stopAutopilot" }).catch(() => {}); } catch { /* extension reloaded */ } }
+            if (btn.dataset.act === "stop") {
+                btn.disabled = true;
+                btn.textContent = "Stopping…";
+                try { chrome.runtime.sendMessage({ type: "stopAutopilot" }).catch(() => {}); } catch { /* extension reloaded */ }
+            }
             if (btn.dataset.act === "collapse") { collapsed = true; render(); }
             if (btn.dataset.act === "expand") { collapsed = false; render(); }
             if (btn.dataset.act === "close") hide();
         });
         document.documentElement.appendChild(host);
         // Some sites redraw the whole page: put the board back until it's closed.
-        keep = new MutationObserver(() => { if (host && !host.isConnected) document.documentElement.appendChild(host); });
+        keep = new MutationObserver(() => {
+            if (!alive()) { hide(); return; } // this copy of the extension was replaced
+            if (host && !host.isConnected) document.documentElement.appendChild(host);
+        });
         keep.observe(document.documentElement, { childList: true });
     }
 
     function render() {
         if (!root || !last) return;
-        const icon = `<img src="${chrome.runtime.getURL("icons/icon-48.png")}" alt="">`;
+        if (!alive()) { hide(); return; }
+        const icon = iconUrl ? `<img src="${iconUrl}" alt="">` : "";
+        const cards = Array.isArray(last.cards) ? last.cards : [];
         if (collapsed) {
-            const busy = last.cards.find((c) => c.current);
+            const busy = cards.find((c) => c.current);
             root.innerHTML = `<button class="mini" data-act="expand">${icon}${esc(last.running ? `Autopilot · ${busy ? busy.name : "working"}` : last.title)}</button>`;
             return;
         }
         root.innerHTML = `<div class="board" role="status" aria-live="polite" aria-label="Finstracker autopilot">
             <div class="head">${icon}<span class="title">${esc(last.title)}</span><button class="x" data-act="${last.running ? "collapse" : "close"}" aria-label="${last.running ? "Minimize" : "Close"}">${last.running ? "–" : "×"}</button></div>
-            ${last.cards.map((c) => `<div class="card"><div class="name">${esc(c.name)}${c.current ? "<small>now</small>" : ""}</div>
-                ${c.steps.map((s) => `<div class="step"><i class="ic ${esc(s.state)}" aria-hidden="true"></i><b>${esc(s.name)}</b><span>${esc(s.text || (s.state === "waiting" ? "Waiting" : ""))}</span></div>`).join("")}</div>`).join("")}
+            ${cards.map((c) => `<div class="card"><div class="name">${esc(c.name)}${c.current ? "<small>now</small>" : ""}</div>
+                ${(c.steps || []).map((s) => `<div class="step"><i class="ic ${esc(s.state)}" aria-hidden="true"></i><b>${esc(s.name)}</b><span>${esc(s.text || (s.state === "waiting" ? "Waiting" : ""))}</span></div>`).join("")}</div>`).join("")}
             <div class="actions">${last.running ? '<button data-act="stop">Stop autopilot</button>' : '<button data-act="close">Close</button>'}</div>
         </div>`;
     }
 
     function show(board) {
+        if (!board) return;
         last = board;
         mount();
         render();

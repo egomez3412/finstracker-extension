@@ -27,6 +27,8 @@ export function startServer({ port = 3000 } = {}) {
         urlKeyed: false, // like Amex: the page address (?account_key=) picks the card, and every link carries it
         log: [], // [{ t, cardId, kind }] when balances and offers were saved
         loginVisits: 0, // like Amex, opening the sign-in page while signed in ends the session
+        history: [], // points history lines saved by the extension: { cardId, key, date, description, points, … }
+        moreClicks: 0, // "Show More" presses on the points activity page
         created: [],
         get points() { return this.cards.c1.currentPoints; },
     };
@@ -59,6 +61,20 @@ export function startServer({ port = 3000 } = {}) {
                 if (b.rewardType && state.transactions.some((t) => t.cardId === id)) return json(res, { fields: { rewardType: "Can't change the reward type of a card with transactions" } }, 400);
                 Object.assign(state.cards[id], b);
                 return json(res, state.cards[id]);
+            }
+            if (group === "transactions" && id === "history" && req.method === "GET") {
+                const mine = state.history.filter((x) => x.cardId === url.searchParams.get("cardId")).sort((a, b) => b.date.localeCompare(a.date));
+                return json(res, { keys: mine.map((x) => x.key), latestDate: mine[0]?.date || null, total: mine.length });
+            }
+            if (group === "transactions" && id === "history" && req.method === "POST") {
+                const b = await readBody(req);
+                if (!state.cards[b.cardId]) return json(res, null, 404);
+                let created = 0, updated = 0;
+                for (const item of b.items) {
+                    const old = state.history.find((x) => x.cardId === b.cardId && x.key === item.key);
+                    if (old) { Object.assign(old, item); updated++; } else { state.history.push({ ...item, cardId: b.cardId }); created++; }
+                }
+                return json(res, { received: b.items.length, created, updated, skipped: 0 }, 201);
             }
             if (group === "transactions" && req.method === "POST") {
                 const t = await readBody(req);
@@ -223,6 +239,7 @@ export function startServer({ port = 3000 } = {}) {
                             : tile([["Sapphire Preferred (...9876)"], ["Ultimate Rewards"], [more ? "99,265" : "98,765", true], ["points"]]),
                         tile([["Blue Cash Everyday (...5555)"], ["Statement balance"], ["$642.10"], ["Reward Dollars"], ["$123.45", true]]),
                     );
+                    if (acct === "c3" || acct === "c4") { const a = el("a", "Your Points Activity"); a.href = "/bank/amex-summary"; root.append(a); return; }
                     const list = el("ul"); list.id = "activity";
                     const rows = [["Nov 3", "Uber Eats", "+1,200 pts"], ["Nov 1", "Grocery bonus", "+300 pts"], ["Oct 28", "Transfer to Delta", "-5,000 pts"]];
                     if (more) rows.unshift(["Nov 8", "Dining", "+500 pts"]);
@@ -302,6 +319,29 @@ export function startServer({ port = 3000 } = {}) {
                         }
                     };
                     drawList();
+                } else if (P === "/bank/amex-summary") {
+                    // Like Amex's "Your Points Activity": one table for every card on the account, newest
+                    // first, five lines at a time behind "Show More".
+                    const rows = [];
+                    const day = (n) => { const d = new Date(Date.now() - n * 864e5); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+                    const shops = ["POCKET BURGER SHACK", "UBER", "FRESH CUT FLOWERS", "LA AGUILA MARKET", "DELTA AIR LINES", "GRUBHUB", "WHOLE FOODS", "HOTEL COLLECTION"];
+                    for (let i = 0; i < 12; i++) rows.push([day(1 + i * 2), ["-61004", "-63001", "-62008"][i % 3], i < 4 ? "Pending" : "Posted", shops[i % shops.length], i % 2 ? "4X" : "", "$" + (10 + i * 3) + ".25", String(40 + i * 7)]);
+                    rows.push([day(30), "-61004", "Posted", "POINTS FOR TRAVEL", "", "", "-5,000"]);
+                    const shown = window.__shown || (window.__shown = 5);
+                    root.append(el("h2", "Your Points Activity"));
+                    const table = el("table"); const head = el("thead"); const hr = el("tr");
+                    for (const h of ["DATE", "CARD", "STATUS", "DESCRIPTION", "", "AMOUNT", "POINTS"]) hr.append(el("th", h));
+                    head.append(hr); table.append(head);
+                    const body = el("tbody");
+                    for (const r of rows.slice(0, shown)) { const tr = el("tr"); for (const c of r) tr.append(el("td", c)); body.append(tr); }
+                    table.append(body);
+                    const wrap = el("section"); wrap.append(table);
+                    if (shown < rows.length) {
+                        const more = el("button", "Show More");
+                        more.addEventListener("click", () => { fetch("/bank/more-clicked"); window.__shown = shown + 5; setTimeout(draw, 400); });
+                        wrap.append(more);
+                    }
+                    root.append(wrap);
                 } else if (P === "/bank/amex-benefits") {
                     // Amex-style benefits: usage hidden in collapsed "View details" sections.
                     for (const [name, detail] of [["Uber Cash", "Earned $15.00 of $15.00"], ["Digital Entertainment Credit", "$5.00 used · $15.00 remaining"], ["Saks Fifth Avenue Credit", "Credit received"], ["Walmart+ Credit", "$0.00 remaining"]]) {
@@ -332,7 +372,8 @@ export function startServer({ port = 3000 } = {}) {
             setTimeout(draw, 1200);`, h);
         if (p === "/bank/login" && req.method === "POST") { res.writeHead(302, { location: "/bank/dashboard", "set-cookie": "bank=1; Path=/" }); return res.end(); }
         const signedIn = /(^|;\s*)bank=1/.test(req.headers.cookie || "");
-        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance", "/bank/amex-home", "/bank/amex-hub", "/bank/amex-hub/activity", "/bank/amex-eligible", "/bank/amex-enrolled", "/bank/overview"];
+        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance", "/bank/amex-home", "/bank/amex-hub", "/bank/amex-hub/activity", "/bank/amex-eligible", "/bank/amex-enrolled", "/bank/overview", "/bank/amex-summary"];
+        if (p === "/bank/more-clicked") { state.moreClicks++; return send(res, 204, "text/plain", ""); }
         const AMEX_PAGES = ["/offers/eligible", "/offers/enrolled", "/card-benefits/activity", "/card-benefits/view-all", "/dashboard", "/overview", "/rewards"];
         if (AMEX_PAGES.includes(p)) pages.push(p);
         if (pages.includes(p) && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }

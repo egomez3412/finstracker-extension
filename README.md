@@ -78,6 +78,10 @@ On a card site, the Finstracker popup names your cards that use the site ("3 of 
 
 **Clicking around the site.** When the page it opens doesn't show what it needs, autopilot clicks through the site the way you would, up to four links or tabs per step: for benefits, the Benefits link and then the tab with usage ("View Benefits Activity", "Track progress"); for offers, the Offers link and the list of offers you can still add ("Eligible offers"). If a page only lists offers already on the card, those are saved and it moves on to the ones it can still add. Tabs already selected and links already tried are skipped, and the site's menus and card switcher are never opened by accident. On Amex it goes straight to Benefits Activity, where usage lives, and reads every offer wording Amex uses ("Spend $75 or more, earn $30", "Earn +2 Membership Rewards® points per eligible dollar").
 
+**Points history.** After each balance sync (the sync button and autopilot), Finstracker reads the site's points activity, such as Amex's "Your Points Activity" table (date, card, status, description, multiplier, amount, points), and saves each line to Finstracker as history. Lines go to the card in the table's card column (Amex lists every card on a Membership Rewards account together); lines for a card not in Finstracker are left out. Only new lines are read: "Show More" is pressed only until a line Finstracker already has shows up, so a second run reads nothing more. A pending line that later posts is updated, never saved twice. History never changes the balance (the balance sync does). If the balance page has no activity, the issuer's activity page (Amex: Rewards summary) or the site's "Points activity" link is opened in the same tab. Settings → Record points activity turns it off.
+
+**Last pulled.** The popup says when each card was last pulled ("Last pulled 2 hours ago", "All pulled yesterday", "Not pulled yet"), and the card list shows it next to each card, so you can skip a run that isn't needed.
+
 **Never the login page.** Each card starts from its saved rewards page or the bank's rewards page, never its sign-in page: loading Amex's login page signs you out. New background tabs share your signed-in session. If you aren't signed in, the bank sends you to its own sign-in.
 
 **Shared points.** Amex Membership Rewards is one balance for every Amex points card on your login (Gold, Platinum, Green show the same number). Autopilot reads it once, on the first such card, and the others say "Shared Membership Rewards balance (saved on Platinum Card)"; their offers and benefits still run. Co-brand cards (Hilton, Delta) and cash back cards keep their own balances. A card the site's card list doesn't have is skipped.
@@ -143,7 +147,8 @@ npm run e2e -- wander   # moving to another page while "Is this your balance?" i
 npm run e2e -- cashback  # Reward Dollars next to a statement balance
 npm run e2e -- offers    # Add to Card on each offer, not the page's own buttons; saved per card
 npm run e2e -- benefits  # follows the Benefits link, marks fully used credits
-npm run e2e -- activity  # baseline first, then new activity lines recorded
+npm run e2e -- activity  # activity lines saved as dated history on the first sync, only the new line on the next; the balance moves with the sync alone
+npm run e2e -- history   # Amex-style points activity table: Show More, lines to the card in their card column, second run reads nothing new; popup shows last pulled
 npm run e2e -- autopilot # balance, offers and benefits from one button
 npm run e2e -- quicktab  # close the prompt, drag the tab, sync from its menu
 npm run e2e -- portal    # three cards on one site with a card switcher, autopilot from the popup

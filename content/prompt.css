@@ -85,3 +85,4 @@
 .fins-prompt-quiet { background: transparent !important; }
 @media (prefers-color-scheme: dark) { .fins-prompt-new { border-top-color: #3c4940; } .fins-prompt-mask { color: #aebcb2; } }
 .fins-prompt-btn[hidden] { display: none; }
+.fins-prompt-last { margin-top: 6px; font-size: 12px; color: #5b6470; }

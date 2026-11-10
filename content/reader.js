@@ -698,7 +698,7 @@
     // beats a long one. The tab already selected and the page already open are skipped, and so are
     // links (by href) and buttons ("text:<label>") in avoid. Followed by href, or clicked when it is
     // a button or tab. Returns { href } / { clicked, text } / null.
-    function findLink(words, avoid) {
+    function findLink(words, avoid, click = true) {
         const WANT = (words || []).map((w) => String(w).toLowerCase());
         const AVOID = new Set(avoid || []);
         const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?(out|in|on)|log ?(out|in|on)|refer|privacy|careers|español|compare|enroll|disclosures?)\b/;
@@ -727,6 +727,7 @@
         }
         if (!best) return null;
         if (best.href) return { href: best.href };
+        if (!click) return null; // only links wanted (to open elsewhere)
         try { best.el.scrollIntoView({ block: "center" }); best.el.click(); return { clicked: true, text: best.text }; } catch { return null; }
     }
 
@@ -980,5 +981,103 @@
         return [...found.values()].map((text) => ({ text }));
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard, listSiteCards };
+    // ---- Points history ("Your Points Activity") ----
+    const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
+    /** "Nov 9" / "Nov 9, 2026" / "11/09/26" → "2026-11-09" (a date without a year that would be in the future is last year's). */
+    function isoDate(text) {
+        const t = String(text || "").trim();
+        const now = new Date();
+        let y = null, m = null, d = null;
+        let hit = t.match(/\b([a-z]{3,9})\.?\s+(\d{1,2})(?:,?\s*(\d{4}))?/i);
+        const month = hit && (MONTHS[hit[1].toLowerCase().slice(0, 4)] || MONTHS[hit[1].toLowerCase().slice(0, 3)]);
+        if (month) {
+            m = month; d = Number(hit[2]); y = hit[3] ? Number(hit[3]) : null;
+        } else if ((hit = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))) {
+            m = Number(hit[1]); d = Number(hit[2]); y = hit[3] ? Number(hit[3].length === 2 ? `20${hit[3]}` : hit[3]) : null;
+        } else if ((hit = t.match(/\b(\d{4})-(\d{2})-(\d{2})\b/))) {
+            y = Number(hit[1]); m = Number(hit[2]); d = Number(hit[3]);
+        }
+        if (!m || !d || m > 12 || d > 31) return null;
+        if (!y) { y = now.getFullYear(); if (new Date(y, m - 1, d) > new Date(now.getTime() + 2 * 864e5)) y -= 1; }
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+    const cleanText = (el) => (el?.innerText || el?.textContent || "").replace(/[\u00a0\u2007]/g, " ").replace(/\s+/g, " ").trim();
+    const signedNumber = (t) => {
+        const m = String(t || "").replace(/[\u2212\u2013]/g, "-").match(/([+-]?)\s*([\d]{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/);
+        return m ? Number(m[2].replace(/,/g, "")) * (m[1] === "-" ? -1 : 1) : null;
+    };
+    /** A line's identity: the same line read again (pending, then posted) gets the same key. */
+    const historyKey = (r) => [r.date, r.card || "", r.description.toLowerCase().replace(/\s+/g, " ").slice(0, 80), r.spend ?? "", r.points].join("|");
+
+    // Tables whose header names a date and a points (or miles) column, read by column.
+    function historyTables() {
+        const out = [];
+        for (const table of document.querySelectorAll("table, [role='table'], [role='grid']")) {
+            const rows = [...table.querySelectorAll("tr, [role='row']")];
+            const head = rows.find((r) => r.querySelector("th, [role='columnheader']")) || rows[0];
+            if (!head) continue;
+            const names = [...head.children].map((c) => cleanText(c).toLowerCase());
+            const col = (rx) => names.findIndex((n) => rx.test(n));
+            const at = { date: col(/\bdate\b/), points: col(/\b(points?|miles|pts)\b/), desc: col(/description|merchant|activity|details|transaction/), card: col(/\bcard\b|account/), status: col(/status/), spend: col(/amount|spend|purchase/) };
+            if (at.date < 0 || at.points < 0) continue;
+            out.push({ table, rows: rows.filter((r) => r !== head), at });
+        }
+        return out;
+    }
+    function readHistoryRows() {
+        const lines = [];
+        for (const { rows, at } of historyTables()) {
+            for (const r of rows) {
+                const cells = [...r.children];
+                if (cells.length < 2) continue;
+                const text = (i) => (i >= 0 && cells[i] ? cleanText(cells[i]) : "");
+                const date = isoDate(text(at.date));
+                const points = signedNumber(text(at.points));
+                if (!date || points == null || points === 0) continue;
+                const descCell = at.desc >= 0 ? at.desc : cells.findIndex((c, i) => i !== at.date && i !== at.points && /[a-z]{3}/i.test(cleanText(c)));
+                const description = text(descCell);
+                if (!/[a-z]{2}/i.test(description)) continue;
+                // Cells between the description and the amount often hold the multiplier ("4X").
+                const multiplier = cells.map(cleanText).find((t) => /^\d+(\.\d+)?x$/i.test(t)) || "";
+                const spendText = text(at.spend);
+                const spend = /\$/.test(spendText) ? Math.abs(Number(spendText.replace(/[^\d.]/g, ""))) * (/^\s*[-\u2212(]/.test(spendText) ? -1 : 1) : null;
+                const card = (text(at.card).match(/(\d{4,5})\b/) || [])[1]?.slice(-4) || "";
+                const status = text(at.status);
+                const line = { date, description: description.slice(0, 120), points, spend: Number.isFinite(spend) ? spend : null, card, status, multiplier };
+                lines.push({ ...line, key: historyKey(line) });
+            }
+        }
+        if (lines.length) return lines;
+        // No table: activity lists ("Nov 3 · Uber Eats · +1,200 pts").
+        return readActivity("points").map((r) => {
+            const line = { date: isoDate(r.date), description: r.description, points: r.amount, spend: null, card: "", status: "", multiplier: "" };
+            return line.date ? { ...line, key: historyKey(line) } : null;
+        }).filter(Boolean);
+    }
+    /**
+     * The points history on this page, opening older lines ("Show More") until a line already saved
+     * shows up (known keys) or there are no more. Returns { rows, clicks, reachedKnown }.
+     */
+    async function readPointsHistory(known, maxClicks = 20) {
+        const seen = new Set(known || []);
+        const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+        const MORE = /^(show|view|load|see)\s+more(\s+(activity|transactions|points))?$|^more activity$/i;
+        let rows = readHistoryRows(), clicks = 0;
+        while (clicks < maxClicks && !rows.some((r) => seen.has(r.key))) {
+            const tables = historyTables().map((t) => t.table);
+            // The button that belongs to the activity table: the nearest "Show More" after it.
+            const buttons = [...document.querySelectorAll("button, [role='button'], a")].filter((b) => MORE.test(cleanText(b) || b.getAttribute("aria-label") || "") && b.getBoundingClientRect().height > 2);
+            const button = buttons.find((b) => tables.some((t) => { let p = b.parentElement; for (let i = 0; i < 6 && p; i++, p = p.parentElement) if (p.contains(t)) return true; return false; })) || (tables.length ? null : buttons[0]);
+            if (!button) break;
+            const before = rows.length;
+            try { button.scrollIntoView({ block: "center" }); button.click(); } catch { break; }
+            clicks += 1;
+            for (let i = 0; i < 12 && readHistoryRows().length === before; i++) await pause(300);
+            rows = readHistoryRows();
+            if (rows.length === before) break;
+        }
+        return { rows, clicks, reachedKnown: rows.some((r) => seen.has(r.key)) };
+    }
+
+    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, readPointsHistory, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard, listSiteCards };
 })();

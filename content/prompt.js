@@ -97,13 +97,34 @@
         body.innerHTML = cards.length === 1
             ? `Update ${names[0]} from ${esc(site)}: balance, offers and benefits.`
             : `${on ? `You're viewing <strong>${esc(on.displayName)}</strong>. ` : ""}${cards.length} of your cards use ${esc(site)}: ${names.join(", ")}. Autopilot updates each one's balance, adds its offers and checks its benefits.`;
+        body.insertAdjacentHTML("beforeend", lastPulledLine(cards));
         runBtn.textContent = cards.length > 1 ? `Run autopilot for ${cards.length} cards` : "Run autopilot";
         one.innerHTML = `
-            ${cards.length > 1 ? `<label class="fins-prompt-label">Just one card<select aria-label="Card">${cards.map((c) => `<option value="${esc(c.id)}"${c.id === current.current ? " selected" : ""}>${esc(c.displayName)}${c.id === current.current ? " (on screen)" : ""}</option>`).join("")}</select></label>` : ""}
+            ${cards.length > 1 ? `<label class="fins-prompt-label">Just one card<select aria-label="Card">${cards.map((c) => `<option value="${esc(c.id)}"${c.id === current.current ? " selected" : ""}>${esc(c.displayName)}${c.id === current.current ? " (on screen)" : ""}${c.lastPull ? ` · ${esc(ago(c.lastPull))}` : ""}</option>`).join("")}</select></label>` : ""}
             <div class="fins-prompt-actions">
                 <button class="fins-prompt-btn" type="button" data-act="sync">Sync this page</button>
                 <button class="fins-prompt-btn" type="button" data-act="pick">Pick the balance</button>
             </div>`;
+    }
+    // "2 hours ago", "yesterday", "Nov 3".
+    function ago(ts) {
+        if (!ts) return "";
+        const mins = Math.round((Date.now() - ts) / 60000);
+        if (mins < 2) return "just now";
+        if (mins < 60) return `${mins} minutes ago`;
+        const hours = Math.round(mins / 60);
+        if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+        const days = Math.round(hours / 24);
+        if (days === 1) return "yesterday";
+        if (days < 7) return `${days} days ago`;
+        return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    }
+    function lastPulledLine(cards) {
+        const times = cards.map((c) => c.lastPull || 0);
+        if (!times.some(Boolean)) return `<div class="fins-prompt-last">Not pulled yet</div>`;
+        if (cards.length === 1) return `<div class="fins-prompt-last">Last pulled ${esc(ago(times[0]))}</div>`;
+        const oldest = Math.min(...times), newest = Math.max(...times);
+        return `<div class="fins-prompt-last">${times.every(Boolean) && newest - oldest < 3600000 ? `All pulled ${esc(ago(newest))}` : `Last pulled: ${cards.map((c) => `${esc(c.displayName)} ${c.lastPull ? esc(ago(c.lastPull)) : "never"}`).join(" · ")}`}</div>`;
     }
     function setStatus(text, kind) {
         status.className = `fins-prompt-status${kind ? ` is-${kind}` : ""}`;

@@ -65,10 +65,11 @@
         const list = current.newCards || [];
         body.innerHTML = !current.scanned ? `Looking for your cards on <strong>${esc(site)}</strong>…`
             : list.length ? `Finstracker found ${list.length === 1 ? "a card" : `${list.length} cards`} on <strong>${esc(site)}</strong>. Add ${list.length === 1 ? "it" : "them"} to Finstracker and autopilot updates each one's balance, adds its offers and checks its benefits.`
+            : current.canFind ? `None of your cards are in Finstracker yet. Finstracker can look for them on <strong>${esc(site)}</strong> (it opens the site's card list).`
             : `Sign in to <strong>${esc(site)}</strong> and Finstracker will find your cards here.`;
-        runBtn.textContent = list.length === 1 ? "Add card and run autopilot" : "Add cards and run autopilot";
-        runBtn.dataset.act = "add-run";
-        runBtn.hidden = !list.length;
+        runBtn.textContent = list.length ? (list.length === 1 ? "Add card and run autopilot" : "Add cards and run autopilot") : "Find my cards";
+        runBtn.dataset.act = list.length ? "add-run" : "find-cards";
+        runBtn.hidden = !list.length && !current.canFind;
         one.innerHTML = "";
     }
     // Cards the site lists that aren't in Finstracker yet: add them (checked by default) or hide them.
@@ -134,6 +135,14 @@
             current = { ...current, newCards: (current.newCards || []).filter((c) => !keys.includes(c.key)) };
             if (current.mode === "start") render(); else renderNew();
             return; // the popup is redrawn with the added cards
+        }
+        if (act === "find-cards") {
+            busy(true);
+            setStatus("Looking for your cards…", "busy");
+            const r = await send({ type: "findCardsForPrompt" });
+            busy(false);
+            setStatus(r?.ok === false ? r.error || "Couldn't look for cards" : r?.found ? "" : "No cards found on this page", r?.ok === false || !r?.found ? "error" : "");
+            return; // the popup is redrawn with what was found
         }
         if (act === "add-run") {
             const keys = [...fresh.querySelectorAll("input[data-new]")].filter((b) => b.checked).map((b) => b.value);

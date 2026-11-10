@@ -246,7 +246,6 @@ function cardRow(card) {
                 ${card.annualFee > 0 ? `<div><dt>Annual fee</dt><dd>${esc(money(card.annualFee))}${fee ? ` · ${esc(shortDate(fee))}` : ""}</dd></div>` : ""}
                 <div><dt>Rewards page</dt><dd>${state.pages[card.id] ? esc(hostOf(state.pages[card.id].url)) : "Not saved yet"}</dd></div>
                 ${override ? `<div><dt>Balance spot</dt><dd>${override.source === "user-picker" ? "Your pick" : "Learned"}</dd></div>` : ""}
-                <div><dt>Daily autopilot</dt><dd><button type="button" class="toggle toggle-inline" role="switch" aria-checked="${Boolean(ap.on)}" aria-label="Daily autopilot for ${esc(card.displayName)}" data-act="toggle-autopilot" data-id="${esc(card.id)}"><span class="toggle-thumb"></span></button></dd></div>
                 ${ap.lastRun ? `<div><dt>Last autopilot</dt><dd>${esc(ago(new Date(ap.lastRun).toISOString()))}</dd></div>${Object.entries(ap.results || {}).map(([k, v]) => `<div><dt>${esc(k[0].toUpperCase() + k.slice(1))}</dt><dd title="${esc(v)}">${esc(v)}</dd></div>`).join("")}` : ""}
             </dl>
             <div class="action-row">
@@ -367,7 +366,6 @@ function settingsView() {
             ${line("Best card at checkout", toggle("toggle-checkout", s.checkoutHints, "Best card at checkout"))}
             ${line("Add offers to my cards", toggle("toggle-setting", s.addOffersToCard, "Add offers to my cards", "addOffersToCard"))}
             ${line("Record points activity", toggle("toggle-setting", s.recordActivity, "Record points activity", "recordActivity"))}
-            ${line("Daily autopilot when signed in", toggle("toggle-setting", s.autopilotAuto, "Daily autopilot when signed in", "autopilotAuto"))}
             ${line("Autopilot adds new cards it finds", toggle("toggle-setting", s.autoAddCards, "Autopilot adds new cards it finds", "autoAddCards"))}
         </ul></div>`)}
         ${panel("Appearance", "", `<div class="panel-body"><ul class="rows">${line("Theme", `<div class="seg" role="tablist" aria-label="Theme">${theme("system", "System")}${theme("light", "Light")}${theme("dark", "Dark")}</div>`)}</ul></div>`)}
@@ -555,11 +553,6 @@ const actions = {
         loadSite(true);
     },
     async "stop-autopilot"() { await send({ type: "stopAutopilot" }); toast("Autopilot stopped"); },
-    async "toggle-autopilot"(el) {
-        const on = !state.autopilot[el.dataset.id]?.on;
-        await send({ type: "setAutopilot", cardId: el.dataset.id, on });
-        if (on && !state.settings.autopilotAuto) toast("Turn on Daily autopilot in Settings to run it by itself");
-    },
     async "unhide-launcher"() { await setState({ launcherHidden: {} }); toast("The quick tab will show on those sites again"); },
     async "toggle-setting"(el) {
         const key = el.dataset.value;

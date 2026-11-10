@@ -941,9 +941,9 @@
 
     // Every card the site lists for this login: the card switcher's options, account tiles, the
     // card in the top bar. Each is a short text with a masked number ("The Platinum Card® •••• 1004").
-    // Reads the switcher's options even while hidden; opens it (and closes it again) only when the
-    // site draws them on open. Returns [{ text }]; the worker cleans and matches them.
-    async function listSiteCards() {
+    // Reads the switcher's options even while hidden; with open, opens it (and closes it again) when
+    // the site draws them only on open. Returns [{ text }]; the worker cleans and matches them.
+    async function listSiteCards(open = false) {
         const MASK = /(?:\.{2,}|[•*·∙●]+|(?<![a-z])x{1,4}|ending(?: in)?)\s*\d{4,5}\b/i; // Amex: "••••61007"
         const OFFER = /(\$\s?\d|%|\bearn\b|\bspend\b|\bpay\b|\bdue\b|\bbalance\b|statement|payment|transaction)/i;
         const ours = "#fins-launcher-root, #fins-status-root, #fins-prompt-root, #fins-picker-host, #fins-board-root";
@@ -969,7 +969,8 @@
             .concat([...document.querySelectorAll("[role='combobox'][aria-expanded='false']")])
             // The switcher shows the current card, or (Amex's Overview) says what it's for.
             .find((el) => !el.closest(ours) && (MASK.test(textOf(el)) || /\b(accounts?|cards?)\b/i.test(el.getAttribute("aria-label") || "")) && el.getBoundingClientRect().width > 2);
-        if (opener && found.size < 2) {
+        // Only after a click of the user's (Find my cards, Run autopilot): never by itself on page load.
+        if (open && opener && found.size < 2) {
             opener.click();
             await pause(700);
             found = new Map([...found, ...collect()]);

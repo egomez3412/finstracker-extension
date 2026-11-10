@@ -364,7 +364,7 @@ try {
     ok = idOf("Delta") && idOf("Hilton") && /Added .*Delta.*Hilton|Added .*Hilton.*Delta/.test(notice)
       && offersOf("c1") === "Best Buy,Chipotle,Delta" && offersOf("c3") === "Hilton,Saks" && offersOf("c4") === "Resy"
       && offersOf(idOf("Delta")) === "Delta Stays" && offersOf(idOf("Hilton")) === "Hilton Resorts"
-      && state.cards.c3.currentPoints === 45000 && state.cards.c4.currentPoints === 150000
+      && state.cards.c3.currentPoints === 45000 && state.cards.c4.currentPoints === 0 && /Shared Membership Rewards .*Gold/.test(run.autopilot?.c4?.results?.balance || "") // one Membership Rewards balance per login
       && state.cards[idOf("Delta")].currentPoints === 62000 && state.cards[idOf("Hilton")].currentPoints === 250000
       && confirms.filter((c) => /Delta|Hilton/.test(c.split("||")[0])).every((c) => (/Delta/.test(c.split("||")[0]) ? /DLT04/ : /HLT08/).test(c))
       && overlapped && maxPages >= 5;
@@ -468,6 +468,41 @@ try {
     log("   after Find my cards:", after.slice(0, 160), "| switcher opened:", opensAfter, "| autopilot:", Boolean(run2.autopilotRun), "| cards added:", Object.keys(state.cards).length);
     ok = !started && opens1 === "0" && /Run autopilot/.test(popup1)
       && /Find my cards/.test(text) && opensBefore === "0" && /Finstracker found 3 cards/.test(after) && Number(opensAfter) >= 1 && !run2.autopilotRun && Object.keys(state.cards).length === 0;
+  } else if (scenario === "nologin") {
+    // Amex cards with nothing saved but the bank's own settings (login page first in them), run from
+    // a signed-in Amex page. Like Amex, loading the login page signs you out: autopilot must never
+    // open it. Served at both Amex hosts inside this test browser only.
+    await ctx.route(/^https:\/\/(www|global)\.americanexpress\.com\//, async (route) => {
+      const u = new URL(route.request().url());
+      const path = /account\/login/i.test(u.pathname) ? "/bank/login" : u.pathname;
+      const r = await route.fetch({ url: `http://localhost:3000${path}${u.search}`, maxRedirects: 0 });
+      await route.fulfill({ response: r });
+    });
+    state.urlKeyed = true;
+    await sw.evaluate(() => chrome.storage.local.set({ rewardsPages: {}, portalOverrides: {}, learnedPages: {} }));
+    bank = await ctx.newPage();
+    await bank.goto("https://global.americanexpress.com/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    state.loginVisits = 0;
+    await bank.goto("https://global.americanexpress.com/bank/rewards"); await bank.bringToFront();
+    let popup = "";
+    for (let i = 0; i < 30 && !/Run autopilot/.test(popup); i++) { await sleep(500); popup = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | ") || "").catch(() => ""); }
+    log("popup:", popup.slice(0, 140));
+    await bank.click('#fins-prompt-root [data-act="run"]');
+    let run, signInAsked = false;
+    const end = Date.now() + 240000;
+    await sleep(1500);
+    while (Date.now() < end) {
+      run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot", "captureSession"]));
+      await bank.click('#fins-status-root [data-action="confirm"]', { timeout: 200 }).catch(() => {});
+      const steps = JSON.stringify(run.autopilotRun?.board?.cards || []) + (run.captureSession?.statusLabel || "");
+      if (/Sign in/i.test(steps)) signInAsked = true;
+      if (!run.autopilotRun) break;
+      await sleep(500);
+    }
+    const ids = Object.keys(run.autopilot || {});
+    log("login page opened:", state.loginVisits, "times | asked to sign in:", signInAsked, "| tab now:", bank.url());
+    for (const id of ids) log(id, JSON.stringify(run.autopilot[id].results));
+    ok = /Run autopilot/.test(popup) && state.loginVisits === 0 && !signInAsked && ids.length >= 2 && ids.every((id) => !/sign/i.test(JSON.stringify(run.autopilot[id].results || {})));
   } else if (scenario === "reset") {
     // Settings → Start over: every card, its offers and credits are deleted; learned pages forgotten.
     state.offers.push({ cardId: "c1", merchant: "Old offer" }, { cardId: "c3", merchant: "Older offer" });
@@ -532,7 +567,8 @@ try {
     const offersOf = (id) => state.offers.filter((o) => o.cardId === id).map((o) => o.merchant).sort().join(",");
     log("offers c3:", offersOf("c3"), "| c4:", offersOf("c4"), "| c1:", offersOf("c1"));
     ok = /viewing Amex Platinum Card/.test(popup || "") && /4 of your cards/.test(popup || "") && chosen === "c4" && s1.cardId === "c4" && s2.cardId === "c4" && s2.followedFrom === "Amex Gold Card"
-      && state.cards.c4.currentPoints === 150000 && state.cards.c3.currentPoints === 45000 && state.cards.c1.currentPoints === 98765
+      // Membership Rewards is one balance per login: read on Platinum (on screen), shared by Gold.
+      && state.cards.c4.currentPoints === 150000 && state.cards.c3.currentPoints === 0 && /Shared Membership Rewards/.test(run.autopilot?.c3?.results?.balance || "") && state.cards.c1.currentPoints === 98765
       && offersOf("c3") === "Hilton,Saks" && offersOf("c4") === "Resy" && offersOf("c1") === "Best Buy,Chipotle,Delta"
       && state.cards.c5.currentPoints === 0 && offersOf("c5") === "" && /Skipped/.test(JSON.stringify((await sw.evaluate(() => chrome.storage.local.get("autopilotLastBoard"))).autopilotLastBoard)); // Green isn't in the switcher: nothing saved for it
   } else if (scenario === "addall") {

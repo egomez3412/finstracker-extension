@@ -116,3 +116,13 @@ test("cards whose issuer field doesn't name the bank still match the bank's site
     const p = resolvePortal({ id: "x", displayName: "Gold", issuer: "Membership Rewards", program: "Membership Rewards" }, {}, portals);
     assert.ok(urlMatches(p.matchUrl, "https://global.americanexpress.com/dashboard"));
 });
+
+test("Membership Rewards is one balance for every Amex points card on a login", async () => {
+    const { sharedProgram } = await import("../lib/programs.js");
+    assert.equal(sharedProgram({ displayName: "Amex Gold Card", issuer: "American Express", rewardType: "points", program: "Membership Rewards" }), "Membership Rewards");
+    assert.equal(sharedProgram({ displayName: "Platinum Card", issuer: "American Express", rewardType: "points" }), "Membership Rewards");
+    assert.equal(sharedProgram({ displayName: "Blue Cash Everyday", issuer: "American Express", rewardType: "cashback" }), null);
+    assert.equal(sharedProgram({ displayName: "Hilton Honors Aspire", issuer: "American Express", rewardType: "points", cardKey: "hilton-honors-aspire" }), null);
+    assert.equal(sharedProgram({ displayName: "Delta SkyMiles Gold Card", issuer: "American Express", rewardType: "points" }), null);
+    assert.equal(sharedProgram({ displayName: "Sapphire Preferred", issuer: "Chase", rewardType: "points" }), null);
+});

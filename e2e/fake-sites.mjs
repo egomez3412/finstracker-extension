@@ -26,6 +26,7 @@ export function startServer({ port = 3000 } = {}) {
         newCard: false, // the switcher also lists a card the user hasn't added to Finstracker
         urlKeyed: false, // like Amex: the page address (?account_key=) picks the card, and every link carries it
         log: [], // [{ t, cardId, kind }] when balances and offers were saved
+        loginVisits: 0, // like Amex, opening the sign-in page while signed in ends the session
         created: [],
         get points() { return this.cards.c1.currentPoints; },
     };
@@ -335,7 +336,10 @@ export function startServer({ port = 3000 } = {}) {
         const AMEX_PAGES = ["/offers/eligible", "/offers/enrolled", "/card-benefits/activity", "/card-benefits/view-all", "/dashboard", "/overview", "/rewards"];
         if (AMEX_PAGES.includes(p)) pages.push(p);
         if (pages.includes(p) && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }
-        if (p === "/bank/login") return send(res, 200, "text/html", page("Sign in", `<form method="post" action="/bank/login"><input name="user" autocomplete="username"><input type="password" name="pw"><button>Sign in</button></form>`), h);
+        if (p === "/bank/login") {
+            if (/(^|;\s*)bank=1/.test(req.headers.cookie || "")) { state.loginVisits++; h["set-cookie"] = "bank=; Path=/; Max-Age=0"; }
+            return send(res, 200, "text/html", page("Sign in", `<form method="post" action="/bank/login"><input name="user" autocomplete="username"><input type="password" name="pw"><button>Sign in</button></form>`), h);
+        }
         if (p === "/bank/rewards") h["content-security-policy"] = `${csp}; require-trusted-types-for 'script'`;
         if (pages.includes(p)) return send(res, 200, "text/html", page("Bank", `<div id="root">Loading…</div><script src="/bank/app.js"></script>`), h);
         return send(res, 404, "text/plain", "not found");

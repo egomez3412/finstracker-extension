@@ -569,7 +569,7 @@
             [/\b(points|miles|cash ?back)\b/, 4],
             [/\bredeem\b/, 2],
         ];
-        const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?out|log ?out|offers?|deals|shop|transfer partners|refer|earn more|credit score|privacy|careers|español)\b/;
+        const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?(out|in|on)|log ?(out|in|on)|offers?|deals|shop|transfer partners|refer|earn more|credit score|privacy|careers|español)\b/;
 
         function visible(el) {
             const r = el.getBoundingClientRect();
@@ -701,7 +701,7 @@
     function findLink(words, avoid) {
         const WANT = (words || []).map((w) => String(w).toLowerCase());
         const AVOID = new Set(avoid || []);
-        const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?out|log ?out|refer|privacy|careers|español|compare|enroll|disclosures?)\b/;
+        const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?(out|in|on)|log ?(out|in|on)|refer|privacy|careers|español|compare|enroll|disclosures?)\b/;
         const site = (h) => h.split(".").slice(-2).join(".");
         const here = location.href.split("#")[0];
         let best = null;

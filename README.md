@@ -78,6 +78,10 @@ On a card site, the Finstracker popup names your cards that use the site ("3 of 
 
 **Clicking around the site.** When the page it opens doesn't show what it needs, autopilot clicks through the site the way you would, up to four links or tabs per step: for benefits, the Benefits link and then the tab with usage ("View Benefits Activity", "Track progress"); for offers, the Offers link and the list of offers you can still add ("Eligible offers"). If a page only lists offers already on the card, those are saved and it moves on to the ones it can still add. Tabs already selected and links already tried are skipped, and the site's menus and card switcher are never opened by accident. On Amex it goes straight to Benefits Activity, where usage lives, and reads every offer wording Amex uses ("Spend $75 or more, earn $30", "Earn +2 Membership Rewards® points per eligible dollar").
 
+**Never the login page.** Each card starts from its saved rewards page or the bank's rewards page, never its sign-in page: loading Amex's login page signs you out. New background tabs share your signed-in session. If you aren't signed in, the bank sends you to its own sign-in.
+
+**Shared points.** Amex Membership Rewards is one balance for every Amex points card on your login (Gold, Platinum, Green show the same number). Autopilot reads it once, on the first such card, and the others say "Shared Membership Rewards balance (saved on Platinum Card)"; their offers and benefits still run. Co-brand cards (Hilton, Delta) and cash back cards keep their own balances. A card the site's card list doesn't have is skipped.
+
 **Only when you click.** Autopilot starts only from a button you press: Run autopilot (popup, quick tab, side panel) or Add cards and run autopilot. There is no daily run by itself. Opening a page only reads it: the popup appears and new cards are looked for without clicking anything on the site; the site's card list is opened only after you press Find my cards, Find new cards on this site or Run autopilot.
 
 Each step also has its own button on the card: **Update points/cash back**, **Sync offers**, **Sync benefits**.
@@ -149,6 +153,7 @@ npm run e2e -- amexbenefits # benefits behind "View details"; each benefit repor
 npm run e2e -- alloffers # Amex-style: added offers leave the list, "Added to Card" page; all 9 saved as on the card
 npm run e2e -- parallel  # account_key in the address: two new cards added and run, cards overlap, each card's offers on its own card
 npm run e2e -- fresh     # no cards in Finstracker, on Amex's address: popup finds 7 cards, adds and runs them all
+npm run e2e -- nologin   # Amex cards with only the bank's settings, run from a signed-in Amex page: the login page is never opened
 npm run e2e -- noclick   # pages load, nothing runs: no autopilot, no sync, the card switcher stays shut; Find my cards opens it
 npm run e2e -- reset     # Settings → Delete all: cards, offers and credits deleted, learned pages forgotten, sign-in kept
 npm run e2e -- amextabs  # Amex layout: home → Rewards & Benefits → View Benefits Activity tab; "$200 Uber Cash · $0 To Go"; menus left closed

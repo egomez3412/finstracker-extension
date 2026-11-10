@@ -32,3 +32,17 @@ test("portal lookup and override clean-up", () => {
     assert.equal(issuerForUrl("https://example.com", portals), null);
     assert.deepEqual(Object.keys(cleanOverrides({ a: { selector: "#x" }, b: { source: "auto-learned", selector: "#y" }, c: null, d: {} })), ["a"]);
 });
+
+test("sign-in pages are never the first choice (Amex signs you out when its login page loads)", async () => {
+    const { isLoginPage, startPage } = await import("../lib/portals.js");
+    assert.equal(isLoginPage("https://www.americanexpress.com/en-us/account/login"), true);
+    assert.equal(isLoginPage("https://www.americanexpress.com/en-US/account/login?DestPage=x"), true);
+    assert.equal(isLoginPage("https://www.hilton.com/en/auth2/guest/login/"), true);
+    assert.equal(isLoginPage("https://secure.chase.com/web/auth/#/logon/logon/chaseOnline"), true);
+    assert.equal(isLoginPage("https://global.americanexpress.com/rewards"), false);
+    assert.equal(isLoginPage("https://global.americanexpress.com/offers/eligible"), false);
+    const amex = { loginUrl: "https://www.americanexpress.com/en-us/account/login", pointsUrlHint: "https://global.americanexpress.com/rewards" };
+    assert.equal(startPage(amex), "https://global.americanexpress.com/rewards");
+    assert.equal(startPage(amex, "https://global.americanexpress.com/overview"), "https://global.americanexpress.com/overview");
+    assert.equal(startPage({ loginUrl: "https://bank.test/login" }), "https://bank.test/login"); // nothing else known
+});

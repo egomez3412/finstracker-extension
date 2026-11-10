@@ -27,7 +27,7 @@
     document.documentElement.appendChild(host);
     const root = host.firstElementChild;
     root.querySelector(".fins-prompt-close").addEventListener("click", () => {
-        chrome.runtime.sendMessage({ type: "dismissPromptForOrigin", origin: location.origin }).catch(() => {});
+        try { chrome.runtime.sendMessage({ type: "dismissPromptForOrigin", origin: location.origin }).catch(() => {}); } catch { /* extension reloaded */ }
         root.classList.remove("fins-show");
         setTimeout(() => host.remove(), 260);
     });

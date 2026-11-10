@@ -25,7 +25,7 @@ try {
   if (!sw) sw = await ctx.waitForEvent("serviceworker", { timeout: 10000 });
   sw.on("console", (m) => { if (m.type() !== "log" || (process.env.DEBUG && m.text().startsWith("[dbg]"))) log("sw", m.type(), m.text()); });
   const extId = new URL(sw.url()).host;
-  await sw.evaluate(() => chrome.storage.local.set({ token: "test-token", apiBase: "http://localhost:3000", user: { username: "e2e" }, rewardsPages: { c1: { url: "http://localhost:3000/bank/dashboard", source: "learned" } } }));
+  await sw.evaluate(() => chrome.storage.local.set({ token: "test-token", apiBase: "http://localhost:3000", devServer: true, user: { username: "e2e" }, rewardsPages: { c1: { url: "http://localhost:3000/bank/dashboard", source: "learned" } } }));
   const session = () => sw.evaluate(() => chrome.storage.local.get("captureSession").then((r) => r.captureSession || null));
   const waitFor = async (pred, label, ms = 40000) => {
     const end = Date.now() + ms; let last = "";
@@ -234,7 +234,10 @@ try {
     await panel.click('[data-act="toggle-card"][data-id="c1"]').catch(() => {});
     await sleep(300);
     await panel.screenshot({ path: `${SHOTS}/autopilot-card.png` });
-    ok = state.points === 98765 && state.offers.length === 3 && state.perks.find((x) => x.id === "p-uber").used && /Balance/.test(results?.balance || "") && /offers saved/.test(results?.offers || "");
+    const { learnedPages } = await sw.evaluate(() => chrome.storage.local.get("learnedPages"));
+    log("learned pages:", JSON.stringify(learnedPages?.c1 || null));
+    ok = state.points === 98765 && state.offers.length === 3 && state.perks.find((x) => x.id === "p-uber").used && /Balance/.test(results?.balance || "") && /offers saved/.test(results?.offers || "")
+      && /^http:\/\/localhost:3000\//.test(learnedPages?.c1?.offers || "") && /^http:\/\/localhost:3000\//.test(learnedPages?.c1?.benefits || "");
   } else if (scenario === "quicktab") {
     // Close the prompt → a Finstracker tab stays on the edge. Drag it, click it, sync from its menu.
     bank = await ctx.newPage();
@@ -411,6 +414,61 @@ try {
     log("read this tab →", s.status, s.pending?.value ?? s.lastScrape?.value ?? s.lastError, "on", s.currentUrl);
     const bad = [2026, 2015, 1, 800, 528, 4800, 8, 1026];
     ok = afterPick?.status === "picking" && state.transactions.length === 0 && s.status === "confirm" && s.pending?.value === 98765 && !bad.includes(s.pending?.value);
+  } else if (scenario === "pagebutton") {
+    // No card is linked to the site yet. The panel offers "Link cards to this site"; after linking two
+    // cards the page shows the popup, and "Run autopilot on this page" runs both on that tab.
+    // "Run autopilot for all cards" and "Add cards" sit at the bottom.
+    const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";
+    await sw.evaluate((path) => chrome.storage.local.set({
+      // Spots picked on another host: the cards aren't linked to localhost until the user links them.
+      portalOverrides: Object.fromEntries(["c1", "c3"].map((id) => [id, { matchUrl: "http://127.0.0.1:3000/*", selector: path, source: "user-picker" }])),
+      rewardsPages: {},
+    }), path);
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("http://localhost:3000/bank/rewards"); await sleep(1500);
+    const popupBefore = await bank.evaluate(() => Boolean(document.querySelector("#fins-prompt-root")));
+    // The panel reads the active tab of its own window; here it is a tab itself, so point it at the bank.
+    await panel.bringToFront();
+    await panel.evaluate(async () => {
+      const [t] = (await chrome.tabs.query({})).filter((x) => x.url.startsWith("http://localhost:3000/bank"));
+      const query = chrome.tabs.query.bind(chrome.tabs);
+      chrome.tabs.query = async (q) => (q?.active ? [t] : query(q));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await panel.waitForSelector('[data-act="link-start"]', { timeout: 10000 });
+    const blockBefore = await panel.evaluate(() => document.querySelector(".page-block")?.innerText.replace(/\n+/g, " | "));
+    const foot = await panel.evaluate(() => document.querySelector(".panel-foot-actions")?.innerText.replace(/\n+/g, " | "));
+    await panel.setViewportSize({ width: 380, height: 760 });
+    await panel.screenshot({ path: `${SHOTS}/page-link.png` });
+    await panel.click('[data-act="link-start"]');
+    await panel.check('.link-list input[value="c1"]'); await panel.check('.link-list input[value="c3"]');
+    await panel.screenshot({ path: `${SHOTS}/page-link-list.png` });
+    await panel.click('[data-act="link-save"]:not([data-value])');
+    await panel.waitForSelector('[data-act="run-autopilot-page"]', { timeout: 10000 });
+    const blockAfter = await panel.evaluate(() => document.querySelector(".page-block")?.innerText.replace(/\n+/g, " | "));
+    await panel.screenshot({ path: `${SHOTS}/page-run.png` });
+    await sleep(1500);
+    const popup = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | "));
+    const pagesBefore2 = ctx.pages().length;
+    await panel.click('[data-act="run-autopilot-page"]');
+    let run;
+    const end = Date.now() + 240000;
+    await sleep(2000);
+    while (Date.now() < end) {
+      run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot", "autopilotError"]));
+      if (process.env.DEBUG) log("  run:", JSON.stringify(run.autopilotRun || null).slice(0, 200), run.autopilotError || "");
+      if (!run.autopilotRun) break;
+      await sleep(500);
+    }
+    await sleep(800);
+    log("popup before linking:", popupBefore, "| block:", blockBefore, "| foot:", foot);
+    log("after linking:", blockAfter, "| popup:", popup);
+    for (const id of ["c1", "c3"]) log(id, JSON.stringify(run.autopilot?.[id]?.results));
+    log("balances:", state.cards.c1.currentPoints, state.cards.c3.currentPoints, "| tabs before/after:", pagesBefore2, ctx.pages().length);
+    ok = !popupBefore && /Link cards to this site/.test(blockBefore || "") && /Run autopilot for all cards/.test(foot || "") && /Add cards/.test(foot || "")
+      && /Run autopilot on this page/.test(blockAfter || "") && /Sapphire/.test(blockAfter || "") && /Gold/.test(blockAfter || "")
+      && /2 cards/.test(popup || "") && state.cards.c1.currentPoints === 98765 && state.cards.c3.currentPoints === 45000 && ctx.pages().length === pagesBefore2;
   } else if (scenario === "existing") {
     bank = await ctx.newPage();
     await bank.goto("http://localhost:3000/bank/login"); await signIn(bank);

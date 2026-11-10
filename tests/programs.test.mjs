@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { balanceHints, distinctWords, nameWords, normalizeIssuer, programFor } from "../lib/programs.js";
+import { balanceHints, cardIssuer, distinctWords, nameWords, normalizeIssuer, programFor } from "../lib/programs.js";
 import { cardsForUrl, nextHop, pageToRemember, resolvePortal, urlMatches } from "../lib/portals.js";
 
 const portals = JSON.parse(readFileSync(new URL("../portals.json", import.meta.url)));
@@ -98,4 +98,21 @@ test("card names without bank words, and the words that tell cards apart", () =>
     assert.deepEqual(distinctWords(bce, [bcp]), ["everyday"]);
     assert.deepEqual(distinctWords({ displayName: "Amex Gold", issuer: "Amex" }, [{ displayName: "Amex Platinum", issuer: "Amex" }]), ["gold"]);
     assert.deepEqual(balanceHints({ displayName: "Amex Gold", issuer: "American Express" }).cardWords, ["gold"]);
+});
+
+test("a card's bank from its issuer, program or name", () => {
+    assert.equal(cardIssuer({ issuer: "Amex", displayName: "Gold" }), "American Express");
+    assert.equal(cardIssuer({ issuer: "", program: "Membership Rewards", displayName: "Gold" }), "American Express");
+    assert.equal(cardIssuer({ issuer: "Membership Rewards", displayName: "Platinum" }), "American Express");
+    assert.equal(cardIssuer({ issuer: "Other", displayName: "Amex Platinum" }), "American Express");
+    assert.equal(cardIssuer({ issuer: "", displayName: "The Platinum Card" }), "American Express");
+    assert.equal(cardIssuer({ issuer: "", displayName: "Sapphire Preferred" }), "Chase");
+    assert.equal(cardIssuer({ issuer: "", program: "Chase Ultimate Rewards", displayName: "My card" }), "Chase");
+    assert.equal(cardIssuer({ issuer: "Citibank", displayName: "Double Cash" }), "Citi");
+    assert.equal(cardIssuer({ issuer: "Local Credit Union", displayName: "Visa" }), "Local Credit Union");
+});
+
+test("cards whose issuer field doesn't name the bank still match the bank's site", () => {
+    const p = resolvePortal({ id: "x", displayName: "Gold", issuer: "Membership Rewards", program: "Membership Rewards" }, {}, portals);
+    assert.ok(urlMatches(p.matchUrl, "https://global.americanexpress.com/dashboard"));
 });

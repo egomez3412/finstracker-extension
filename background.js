@@ -49,26 +49,24 @@ chrome.runtime.onMessage.addListener(onMessage);
 chrome.runtime.onMessageExternal.addListener(onExternalMessage);
 
 chrome.runtime.onInstalled.addListener(async () => {
-    const cur = await chrome.storage.local.get(["apiBase", "portalOverrides"]);
-    if (!cur.apiBase) await chrome.storage.local.set({ apiBase: PRODUCTION });
+    const cur = await chrome.storage.local.get(["portalOverrides"]); // apiBase defaults to production (lib/storage.js)
     if (cur.portalOverrides) await chrome.storage.local.set({ portalOverrides: cleanOverrides(cur.portalOverrides) });
-    await useLocalServerIfRunning();
+    await stayOnProduction();
 });
 
 // The toolbar icon opens the side panel, which stays open across navigation and sign-in.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
-useLocalServerIfRunning();
+stayOnProduction();
 
 /**
- * For development: when the extension is still on the production server and a local Finstracker
- * answers on localhost:3000, use it. Never overrides a server the user chose.
+ * Finstracker always talks to finstracker.com. Early builds switched to any server answering on
+ * localhost:3000 and stayed there (so sign-in opened a localhost page); move those back. A local
+ * server is only used when devServer is set on purpose (the e2e tests do).
  */
-async function useLocalServerIfRunning() {
-    const LOCAL = "http://localhost:3000";
+async function stayOnProduction() {
     try {
-        const { apiBase } = await chrome.storage.local.get(["apiBase"]);
-        if (apiBase && apiBase !== PRODUCTION) return;
-        const res = await fetch(`${LOCAL}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(800) });
-        if (res.ok) await chrome.storage.local.set({ apiBase: LOCAL });
-    } catch { /* not running; stay on production */ }
+        const { apiBase, devServer } = await chrome.storage.local.get(["apiBase", "devServer"]);
+        if (devServer || !apiBase || apiBase === PRODUCTION) return;
+        await chrome.storage.local.set({ apiBase: PRODUCTION });
+    } catch { /* storage unavailable; try again next start */ }
 }

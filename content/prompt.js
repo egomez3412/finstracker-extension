@@ -23,6 +23,9 @@
             <p class="fins-prompt-status" aria-live="polite"></p>
         </div>`;
     document.documentElement.appendChild(host);
+    // Some sites redraw the whole page and drop anything added to it: put this back until it's closed.
+    const keep = new MutationObserver(() => { if (!host.isConnected) document.documentElement.appendChild(host); });
+    keep.observe(document.documentElement, { childList: true });
     const root = host.firstElementChild;
     const body = root.querySelector(".fins-prompt-body");
     const one = root.querySelector(".fins-prompt-one");
@@ -38,7 +41,18 @@
         const id = one.querySelector("select")?.value;
         return cards.find((c) => c.id === id) || viewing() || cards[0] || null;
     }
+    function renderLink() {
+        // None of the user's cards is linked to this bank's site yet: ask which ones use it.
+        const all = current.allCards || [];
+        body.innerHTML = `Which of your cards use <strong>${esc(site)}</strong>? Finstracker will remember them for this site.
+            <div class="fins-prompt-checks">${all.map((c) => `<label><input type="checkbox" value="${esc(c.id)}"> ${esc(c.displayName)}</label>`).join("")}</div>`;
+        runBtn.textContent = "Save and run autopilot";
+        runBtn.dataset.act = "link-run";
+        one.innerHTML = `<div class="fins-prompt-actions"><button class="fins-prompt-btn" type="button" data-act="link">Save</button></div>`;
+    }
     function render() {
+        if (current.mode === "link") return renderLink();
+        runBtn.dataset.act = "run";
         const cards = cardsHere();
         const names = cards.map((c) => `<strong>${esc(c.displayName)}</strong>`);
         const on = viewing();
@@ -59,16 +73,27 @@
     }
     const busy = (on) => root.querySelectorAll("button[data-act]").forEach((b) => { b.disabled = on; });
     function remove() {
+        keep.disconnect();
         root.classList.remove("fins-show");
         setTimeout(() => host.remove(), 260);
         window.__finsPromptInstance = null;
     }
-    const send = (msg) => chrome.runtime.sendMessage(msg).catch((err) => ({ ok: false, error: err?.message }));
+    const send = (msg) => { try { return chrome.runtime.sendMessage(msg).catch((err) => ({ ok: false, error: err?.message })); } catch (err) { return Promise.resolve({ ok: false, error: "Finstracker was updated. Reload this page." }); } };
 
     root.addEventListener("click", async (e) => {
         const btn = e.target.closest("[data-act]");
         if (!btn || btn.disabled) return;
         const act = btn.dataset.act;
+        if (act === "link" || act === "link-run") {
+            const ids = [...body.querySelectorAll("input[type=checkbox]:checked")].map((i) => i.value);
+            if (!ids.length) { setStatus("Tick at least one card", "error"); return; }
+            busy(true);
+            setStatus("Saving…", "busy");
+            const r = await send({ type: "linkCardsToSite", cardIds: ids, run: act === "link-run" });
+            if (r?.ok === false) { setStatus(r.error || "Couldn't save", "error"); busy(false); return; }
+            remove(); // the regular popup (or autopilot) takes over
+            return;
+        }
         if (act === "run") {
             busy(true);
             setStatus("Starting autopilot…", "busy");
@@ -87,7 +112,7 @@
         remove(); // the status note (or the picker) takes over
     });
     root.querySelector(".fins-prompt-close").addEventListener("click", () => {
-        chrome.runtime.sendMessage({ type: "collapsePrompt" }).catch(() => {}); // leaves the quick tab on the edge
+        try { chrome.runtime.sendMessage({ type: "collapsePrompt" }).catch(() => {}); } catch { /* extension reloaded */ } // leaves the quick tab on the edge
         remove();
     });
 

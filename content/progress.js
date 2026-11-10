@@ -8,7 +8,7 @@
     if (window.__finsBoard) return;
     if (window.top !== window.self) return;
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-    let host = null, root = null, collapsed = false, last = null;
+    let host = null, root = null, collapsed = false, last = null, keep = null;
 
     function mount() {
         if (host?.isConnected) return;
@@ -55,12 +55,15 @@
         root.addEventListener("click", (e) => {
             const btn = e.target.closest("[data-act]");
             if (!btn) return;
-            if (btn.dataset.act === "stop") chrome.runtime.sendMessage({ type: "stopAutopilot" }).catch(() => {});
+            if (btn.dataset.act === "stop") { try { chrome.runtime.sendMessage({ type: "stopAutopilot" }).catch(() => {}); } catch { /* extension reloaded */ } }
             if (btn.dataset.act === "collapse") { collapsed = true; render(); }
             if (btn.dataset.act === "expand") { collapsed = false; render(); }
             if (btn.dataset.act === "close") hide();
         });
         document.documentElement.appendChild(host);
+        // Some sites redraw the whole page: put the board back until it's closed.
+        keep = new MutationObserver(() => { if (host && !host.isConnected) document.documentElement.appendChild(host); });
+        keep.observe(document.documentElement, { childList: true });
     }
 
     function render() {
@@ -85,6 +88,8 @@
         render();
     }
     function hide() {
+        keep?.disconnect();
+        keep = null;
         host?.remove();
         host = root = null;
     }

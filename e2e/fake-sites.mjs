@@ -112,7 +112,7 @@ export function startServer({ port = 3000 } = {}) {
             // Single-page app: content arrives late, some links navigate in-app (like Amex), and the
             // DOM is built without innerHTML so it also runs under Trusted Types.
             // The test may serve this bank at Amex's address: Amex's own paths are its pages.
-            const AMEX_PATHS = { "/offers/eligible": "/bank/offers", "/offers/enrolled": "/bank/amex-enrolled", "/card-benefits/activity": "/bank/benefits", "/card-benefits/view-all": "/bank/benefits", "/dashboard": "/bank/dashboard", "/overview": "/bank/dashboard", "/rewards": "/bank/rewards" };
+            const AMEX_PATHS = { "/offers/eligible": "/bank/offers", "/offers/enrolled": "/bank/amex-enrolled", "/card-benefits/activity": "/bank/benefits", "/card-benefits/view-all": "/bank/benefits", "/dashboard": "/bank/dashboard", "/overview": "/bank/overview", "/rewards": "/bank/rewards" };
             var P = AMEX_PATHS[location.pathname] || location.pathname; // again on every draw (in-app routes)
             const el = (tag, text, style) => { const n = document.createElement(tag); if (text) n.textContent = text; if (style) n.style.cssText = style; return n; };
             const tile = (lines) => { const d = el("div"); d.className = "tile"; for (const [t, big] of lines) d.append(el("div", t, big ? "font-size:28px" : "")); return d; };
@@ -135,7 +135,7 @@ export function startServer({ port = 3000 } = {}) {
                     });
                     list.append(li);
                 }
-                b.addEventListener("click", () => { list.hidden = !list.hidden; b.setAttribute("aria-expanded", String(!list.hidden)); });
+                b.addEventListener("click", () => { document.body.dataset.opens = String(Number(document.body.dataset.opens || 0) + 1); list.hidden = !list.hidden; b.setAttribute("aria-expanded", String(!list.hidden)); });
                 h.append(b, list);
                 return h;
             }
@@ -186,6 +186,21 @@ export function startServer({ port = 3000 } = {}) {
             }
             var draw = function () {
                 const root = document.getElementById("root");
+                if (P === "/bank/overview") {
+                    // Like Amex's Overview: the account list says what it's for, not which card, and
+                    // its options exist only once it's opened.
+                    const box = el("div", "Overview ▾"); box.setAttribute("role", "combobox"); box.setAttribute("aria-expanded", "false"); box.setAttribute("aria-label", "Open to manage your other accounts");
+                    box.style.cssText = "display:inline-block;padding:6px;border:1px solid #999;cursor:pointer";
+                    const list = el("div"); list.setAttribute("role", "listbox");
+                    box.addEventListener("click", () => {
+                        document.body.dataset.opens = String(Number(document.body.dataset.opens || 0) + 1);
+                        const open = box.getAttribute("aria-expanded") !== "true";
+                        box.setAttribute("aria-expanded", String(open));
+                        list.replaceChildren(...(open ? Object.values(ACCOUNTS).map(([name]) => { const o = el("div", name.replace(/\(\.\.\.(\d{4})\)/, "••••$1")); o.setAttribute("role", "option"); return o; }) : []));
+                    });
+                    root.replaceChildren(el("h1", "Overview"), box, list, el("p", "Welcome back. Your accounts are listed above."));
+                    return;
+                }
                 if (P.startsWith("/bank/amex-home") || P.startsWith("/bank/amex-hub")) {
                     root.replaceChildren(amexNav());
                     if (P === "/bank/amex-home") root.append(tile([["Platinum Card® (...1004)"], ["Membership Rewards® Points"], ["150,000", true]]), el("p", "Statement balance $1,240.18"));
@@ -316,7 +331,7 @@ export function startServer({ port = 3000 } = {}) {
             setTimeout(draw, 1200);`, h);
         if (p === "/bank/login" && req.method === "POST") { res.writeHead(302, { location: "/bank/dashboard", "set-cookie": "bank=1; Path=/" }); return res.end(); }
         const signedIn = /(^|;\s*)bank=1/.test(req.headers.cookie || "");
-        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance", "/bank/amex-home", "/bank/amex-hub", "/bank/amex-hub/activity", "/bank/amex-eligible", "/bank/amex-enrolled"];
+        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance", "/bank/amex-home", "/bank/amex-hub", "/bank/amex-hub/activity", "/bank/amex-eligible", "/bank/amex-enrolled", "/bank/overview"];
         const AMEX_PAGES = ["/offers/eligible", "/offers/enrolled", "/card-benefits/activity", "/card-benefits/view-all", "/dashboard", "/overview", "/rewards"];
         if (AMEX_PAGES.includes(p)) pages.push(p);
         if (pages.includes(p) && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }

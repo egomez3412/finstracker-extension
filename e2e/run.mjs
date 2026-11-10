@@ -426,6 +426,48 @@ try {
       && /Delta Stays/.test(offersOf(idOf("Delta"))) && /Hilton Resorts/.test(offersOf(idOf("Hilton")))
       && /Uber Eats/.test(offersOf(idOf("Platinum"))) // from the "Added to Card" page
       && made.filter((c) => run.autopilot?.[c.id]?.results).length === 7;
+  } else if (scenario === "noclick") {
+    // Nothing runs unless you click. 1. Cards on the site, and the old daily-autopilot switches left
+    // on: loading pages starts no autopilot and no sync, and never opens the site's card switcher.
+    const path = "#root > div.tile:nth-of-type(2) > div:nth-of-type(3)";
+    await sw.evaluate((path) => chrome.storage.local.set({
+      autopilotAuto: true, autopilot: { c1: { on: true, lastRun: 0 }, c3: { on: true, lastRun: 0 } }, autopilotStoppedAt: 0,
+      portalOverrides: Object.fromEntries(["c1", "c3"].map((id) => [id, { matchUrl: "http://localhost:3000/*", selector: path, source: "user-picker" }])),
+    }), path);
+    bank = await ctx.newPage();
+    await bank.goto("http://localhost:3000/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    let started = false;
+    for (const p of ["/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/rewards"]) {
+      await bank.goto(`http://localhost:3000${p}`); await bank.bringToFront();
+      for (let i = 0; i < 12; i++) { await sleep(500); const s = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "captureSession"])); if (s.autopilotRun || s.captureSession) started = true; }
+    }
+    const opens1 = await bank.evaluate(() => document.body.dataset.opens || "0");
+    const popup1 = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | ") || "");
+    const flags = await sw.evaluate(() => chrome.storage.local.get(["autopilotAuto"]));
+    log("1. started by itself:", started, "| switcher opened:", opens1, "| popup:", popup1.slice(0, 90), "| autopilotAuto now:", flags.autopilotAuto);
+    // 2. No cards in Finstracker, on an Amex-like Overview whose card list exists only when opened:
+    // the popup offers "Find my cards" and opens the list only on that click; nothing runs.
+    await ctx.route("https://global.americanexpress.com/**", async (route) => {
+      const u = new URL(route.request().url());
+      const r = await route.fetch({ url: `http://localhost:3000${u.pathname}${u.search}`, maxRedirects: 0 });
+      await route.fulfill({ response: r });
+    });
+    for (const id of Object.keys(state.cards)) delete state.cards[id];
+    await sw.evaluate(() => chrome.storage.local.set({ cardsCache: [], cardsCachedAt: 0, rewardsPages: {}, portalOverrides: {} }));
+    await bank.goto("https://global.americanexpress.com/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("https://global.americanexpress.com/overview"); await bank.bringToFront();
+    let text = "";
+    for (let i = 0; i < 40 && !/Find my cards|Finstracker found|Sign in/.test(text); i++) { await sleep(500); text = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | ") || "").catch(() => ""); }
+    const opensBefore = await bank.evaluate(() => document.body.dataset.opens || "0");
+    log("2. popup:", text, "| switcher opened before the click:", opensBefore);
+    await bank.click('#fins-prompt-root [data-act="find-cards"]').catch((e) => log("no Find my cards button", e.message.split("\n")[0]));
+    let after = "";
+    for (let i = 0; i < 20 && !/Finstracker found/.test(after); i++) { await sleep(500); after = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | ") || "").catch(() => ""); }
+    const opensAfter = await bank.evaluate(() => document.body.dataset.opens || "0");
+    const run2 = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun"]));
+    log("   after Find my cards:", after.slice(0, 160), "| switcher opened:", opensAfter, "| autopilot:", Boolean(run2.autopilotRun), "| cards added:", Object.keys(state.cards).length);
+    ok = !started && opens1 === "0" && /Run autopilot/.test(popup1)
+      && /Find my cards/.test(text) && opensBefore === "0" && /Finstracker found 3 cards/.test(after) && Number(opensAfter) >= 1 && !run2.autopilotRun && Object.keys(state.cards).length === 0;
   } else if (scenario === "reset") {
     // Settings → Start over: every card, its offers and credits are deleted; learned pages forgotten.
     state.offers.push({ cardId: "c1", merchant: "Old offer" }, { cardId: "c3", merchant: "Older offer" });

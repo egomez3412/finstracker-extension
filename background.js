@@ -59,6 +59,8 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
 stayOnProduction();
 // A run saved before this worker started can no longer finish: mark it stopped.
 clearStaleRun().catch(() => {});
+// Autopilot only runs when the user clicks Run: the old daily run's switches are turned off.
+chrome.storage.local.set({ autopilotAuto: false }).catch(() => {});
 
 /**
  * Finstracker always talks to finstracker.com. Early builds switched to any server answering on

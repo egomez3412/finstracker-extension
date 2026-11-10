@@ -383,6 +383,49 @@ try {
     const names = state.offers.map((o) => o.merchant).sort().join(",");
     ok = s.status === "synced" && names === "Audible,Best Buy,Dell,Duolingo,Glasses.com,Lyft,Saks,Uber Eats,Walmart" && state.offers.every((o) => o.activated)
       && /Added 6 to your card · 9 offers saved · 9 on the card/.test(s.statusLabel || "");
+  } else if (scenario === "fresh") {
+    // A Finstracker account with no cards (new, or after Delete all) on Amex: the popup finds the cards
+    // the site lists and offers "Add cards and run autopilot". The fake bank is served at Amex's
+    // address inside this test browser only.
+    await ctx.route("https://global.americanexpress.com/**", async (route) => {
+      const u = new URL(route.request().url());
+      // Amex's own pages, as the fake bank has them.
+      const AMEX = { "/offers/eligible": "/bank/offers", "/offers/enrolled": "/bank/amex-enrolled", "/card-benefits/activity": "/bank/benefits", "/card-benefits/view-all": "/bank/benefits", "/dashboard": "/bank/dashboard", "/overview": "/bank/dashboard" };
+      if (process.env.DEBUG) log("  route", route.request().method(), u.pathname + u.search);
+      const r = await route.fetch({ url: `http://localhost:3000${u.pathname.startsWith("/bank/") || AMEX[u.pathname] ? u.pathname : "/bank/rewards"}${u.search}`, maxRedirects: 0 });
+      await route.fulfill({ response: r });
+    });
+    state.urlKeyed = true; state.newCard = true;
+    for (const id of Object.keys(state.cards)) delete state.cards[id];
+    await sw.evaluate(() => chrome.storage.local.set({ cardsCache: [], cardsCachedAt: 0, rewardsPages: {}, portalOverrides: {} }));
+    bank = await ctx.newPage();
+    await bank.goto("https://global.americanexpress.com/bank/login"); await signIn(bank); await bank.waitForURL(/dashboard/);
+    await bank.goto("https://global.americanexpress.com/bank/rewards"); await bank.bringToFront();
+    let text = "";
+    for (let i = 0; i < 40 && !/Finstracker found/.test(text); i++) { await sleep(500); text = await bank.evaluate(() => document.querySelector("#fins-prompt-root")?.innerText.replace(/\n+/g, " | ") || "").catch(() => ""); }
+    log("popup:", text);
+    await bank.screenshot({ path: `${SHOTS}/fresh-popup.png` });
+    await bank.click('#fins-prompt-root [data-act="add-run"]').catch((e) => log("click failed", e.message));
+    let run;
+    const end = Date.now() + 240000;
+    await sleep(2000);
+    while (Date.now() < end) {
+      run = await sw.evaluate(() => chrome.storage.local.get(["autopilotRun", "autopilot"]));
+      await bank.click('#fins-status-root [data-action="confirm"]', { timeout: 200 }).catch(() => {});
+      if (!run.autopilotRun) break;
+      await sleep(500);
+    }
+    await sleep(800);
+    const made = Object.values(state.cards);
+    const idOf = (name) => made.find((c) => c.displayName.includes(name))?.id;
+    const offersOf = (id) => state.offers.filter((o) => o.cardId === id).map((o) => o.merchant).sort().join(",");
+    log("added:", made.map((c) => `${c.displayName} (${c.issuer}, ${c.rewardType})`).join(", "));
+    for (const c of made) log(c.displayName, JSON.stringify(run.autopilot?.[c.id]?.results), "| offers:", offersOf(c.id));
+    ok = /Finstracker found 7 cards on americanexpress\.com/.test(text) && made.length === 7 && made.every((c) => c.issuer === "American Express")
+      && /Resy/.test(offersOf(idOf("Platinum"))) && /Hilton,.*Saks/.test(offersOf(made.find((c) => c.displayName === "Gold Card")?.id))
+      && /Delta Stays/.test(offersOf(idOf("Delta"))) && /Hilton Resorts/.test(offersOf(idOf("Hilton")))
+      && /Uber Eats/.test(offersOf(idOf("Platinum"))) // from the "Added to Card" page
+      && made.filter((c) => run.autopilot?.[c.id]?.results).length === 7;
   } else if (scenario === "reset") {
     // Settings → Start over: every card, its offers and credits are deleted; learned pages forgotten.
     state.offers.push({ cardId: "c1", merchant: "Old offer" }, { cardId: "c3", merchant: "Older offer" });

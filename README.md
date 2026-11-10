@@ -52,9 +52,13 @@ Close the sync prompt on a card's site and a small Finstracker tab stays on the 
 
 On a card site, the Finstracker popup names your cards that use the site ("3 of your cards use americanexpress.com: Gold, Platinum, Blue Cash") and offers **Run autopilot for 3 cards**. It runs in that tab. When several cards share a site, autopilot selects each card in the site's own card switcher before reading its balance, offers and benefits. If a card can't be selected on the offers or benefits page, that step is skipped for the card rather than saving another card's data. A short summary, one line per card, shows on the page at the end. The quick tab has the same **Run autopilot for all**.
 
-**Windows and the progress board.** Run by hand, autopilot reads each card's balance in your tab, then opens two small windows beside it that add and save the card's offers and check its benefits at the same time; they close when done. Cards run one after another, since a site shows one selected card at a time. A board in the top-right of the portal page shows every card with its Balance, Offers and Benefits as they happen (minimize it, or Stop autopilot); it stays with the results when autopilot is done. The daily run works in one background tab instead, without windows.
+**In the side panel.** The top of Your cards is about the tab you're on: **Run autopilot on this page** for the cards that use its site (it runs in that tab). If none of your cards is linked to the site yet, **Link cards to this site** lists your cards to tick, then **Save** or **Save and run autopilot**; the site is remembered for them. **Change cards** edits the list. **Run autopilot for all cards** and **Add cards** are at the bottom of the list.
 
-**Run autopilot** (on a card, or for all cards at the top of Your cards) goes through the issuer's pages in one tab and updates everything for each card:
+**A bank's site with none of your cards linked.** Cards are matched to a site by their issuer, their program (Membership Rewards → American Express, Ultimate Rewards → Chase) or well-known names (Platinum Card, Sapphire, Venture), so a card saved with an unusual issuer still finds its bank. If none matches, the popup asks "Which of your cards use americanexpress.com?" with the same Save / Save and run autopilot. When a card is linked to a site other than its issuer's, offers and benefits are found on that site rather than the issuer's usual pages.
+
+**Background tabs and the progress board.** Start autopilot from any page of the site (the home page is fine): it follows the site's own links to the balance, offers and benefits pages, and remembers where it found each one so the next run goes straight there. Run by hand, it reads each card's balance in your tab, then opens two background tabs next to it (same window, so the site shows its full desktop pages) that add and save the card's offers and check its benefits at the same time; they close when done. No step waits forever: looking for a balance or an OK on the page gives up after about 90 seconds once you're signed in, and offers or benefits after 3 minutes, so the other steps still run. Cards run one after another, since a site shows one selected card at a time. A board in the top-right of the portal page shows every card with its Balance, Offers and Benefits as they happen (minimize it, or Stop autopilot); it stays with the results when autopilot is done. The daily run works in one background tab instead.
+
+**Run autopilot** (on a card, on this page, or for all cards at the bottom of Your cards) goes through the issuer's pages in one tab and updates everything for each card:
 
 1. **Balance**: points, or cash back for cash back cards (Amex "Reward Dollars", Discover "Cashback Bonus", "cash back"), plus new **points activity** lines ("Nov 8 · Dining · +500 pts") recorded as their own entries. The first read of a card only notes what is already there, so nothing is counted twice.
 2. **Offers**: clicks **Add to Card** on every offer tile (only inside offer tiles, never page buttons like "Add card"), then saves all offers to that card in Finstracker, marking the ones on the card. Banks without a known offers page are reached through their own "Offers" link.
@@ -129,6 +133,7 @@ npm run e2e -- viewing   # the page shows Platinum: popup, Sync this page, Read 
 npm run e2e -- addall    # Amex-style offers: new formats, redrawn list, Load more, a lost click; all 8 added
 npm run e2e -- amexbenefits # benefits behind "View details"; each benefit reported with what happened
 npm run e2e -- noise     # © 2026, phone numbers, dates: never read or picked as a balance
+npm run e2e -- pagebutton # no card linked: link two from the panel, popup appears, Run autopilot on this page
 ```
 
 ## Security model

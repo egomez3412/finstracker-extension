@@ -70,3 +70,8 @@
 .fins-status-rows dt { font-size: 13px; font-weight: 600; }
 .fins-status-rows dd { margin: 2px 0 0; color: #4f5648; font-size: 12px; }
 @media (prefers-color-scheme: dark) { .fins-status-rows div { border-top-color: #3c4940; } .fins-status-rows dd { color: #aebcb2; } }
+/* "Which of your cards use this site?" */
+.fins-prompt-checks { display: grid; gap: 6px; margin: 8px 0 2px; max-height: 180px; overflow: auto; }
+.fins-prompt-checks label { display: flex; align-items: center; gap: 8px; color: #1a1f17; font-size: 13px; cursor: pointer; }
+.fins-prompt-checks input { all: revert; margin: 0; }
+@media (prefers-color-scheme: dark) { .fins-prompt-checks label { color: #eef4ee; } }

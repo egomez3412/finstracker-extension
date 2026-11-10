@@ -19,6 +19,9 @@
     host.id = "fins-launcher-root";
     Object.assign(host.style, { position: "fixed", inset: "0", zIndex: "2147483645", pointerEvents: "none" });
     document.documentElement.appendChild(host);
+    // Some sites redraw the whole page and drop anything added to it: put this back until it's closed.
+    const keep = new MutationObserver(() => { if (!host.isConnected) document.documentElement.appendChild(host); });
+    keep.observe(document.documentElement, { childList: true });
     const shadow = host.attachShadow({ mode: "closed" });
     shadow.innerHTML = `<style>
         :host, * { box-sizing: border-box; }
@@ -97,7 +100,7 @@
 
     async function act(name) {
         const card = selectedCard();
-        const send = (msg) => chrome.runtime.sendMessage(msg).catch((err) => ({ ok: false, error: err?.message }));
+        const send = (msg) => { try { return chrome.runtime.sendMessage(msg).catch((err) => ({ ok: false, error: err?.message })); } catch (err) { return Promise.resolve({ ok: false, error: "Finstracker was updated. Reload this page." }); } };
         if (name === "close") return toggle(false);
         if (name === "hide") {
             const { launcherHidden = {} } = await chrome.storage.local.get("launcherHidden");
@@ -160,6 +163,7 @@
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && open) toggle(false); });
 
     function remove() {
+        keep.disconnect();
         host.remove();
         window.__finsLauncher = null;
     }

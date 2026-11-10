@@ -14,6 +14,8 @@ const state = {
     settings: { autoDetect: true, checkoutHints: false, theme: "system", addOffersToCard: true, recordActivity: true, autopilotAuto: false, launcherOn: true },
     launcherHidden: {}, // sites where the quick tab was hidden
     autopilot: {}, // cardId → { on, lastRun, results }
+    page: null, // the open tab: { tabId, url, site, bank, cardIds } (cards linked to its site)
+    linking: false, // showing "Which of your cards use this site?"
     autopilotRun: null, // { running, total, index, cardName, step }
     overrides: {},
     pages: {}, // cardId → { url, source } where the balance was found or the user set it
@@ -32,7 +34,7 @@ let lastView = "";
 
 /* ---------- helpers ---------- */
 
-const send = (message) => chrome.runtime.sendMessage(message).catch((err) => ({ ok: false, error: err?.message || "Extension error" }));
+const send = (message) => { try { return chrome.runtime.sendMessage(message).catch((err) => ({ ok: false, error: err?.message || "Extension error" })); } catch (err) { return Promise.resolve({ ok: false, error: err?.message || "Extension error" }); } };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const today = () => localToday();
 const base = () => String(state.apiBase || PRODUCTION).replace(/\/$/, "");
@@ -117,8 +119,11 @@ async function loadSite(force = false) {
     const url = tab?.url || "";
     if (!force && url === state.siteUrl) return;
     state.siteUrl = url;
-    const r = /^https?:/.test(url) ? await send({ type: "siteAdvice", url }) : null;
+    state.linking = false;
+    const web = /^https?:/.test(url);
+    const [r, p] = await Promise.all([web ? send({ type: "siteAdvice", url }) : null, web ? send({ type: "pageCards", url }) : null]);
     state.advice = r?.ok ? r.advice : null;
+    state.page = p?.ok ? { tabId: tab.id, url, site: p.site, bank: p.bank, cardIds: p.cardIds } : null;
     render();
 }
 function loadAll() {
@@ -252,13 +257,39 @@ function cardRow(card) {
     </li>`;
 }
 
+/** Top of Your cards: autopilot for the cards on the site in the open tab, or linking cards to it. */
+function pageBlock() {
+    const p = state.page;
+    if (!p || !state.cards?.length) return "";
+    const here = state.cards.filter((c) => p.cardIds.includes(c.id));
+    if (state.linking) {
+        return `<div class="page-block">
+            <div class="row-title">Which of your cards use ${esc(p.site)}?</div>
+            <div class="link-list">${state.cards.map((c) => `<label class="link-item"><input type="checkbox" value="${esc(c.id)}" ${p.cardIds.includes(c.id) ? "checked" : ""}> ${esc(c.displayName)}</label>`).join("")}</div>
+            <div class="action-row"><button type="button" class="btn-primary btn-small" data-act="link-save" data-value="run">Save and run autopilot</button><button type="button" class="btn-ghost btn-small" data-act="link-save">Save</button><button type="button" class="btn-ghost btn-small" data-act="link-cancel">Cancel</button></div>
+        </div>`;
+    }
+    if (here.length) {
+        return `<div class="page-block">
+            <div class="row-main"><div class="row-title">On ${esc(p.site)}</div><div class="row-sub">${esc(here.map((c) => c.displayName).join(", "))}</div></div>
+            <div class="action-row"><button type="button" class="btn-primary btn-small" data-act="run-autopilot-page" ${state.autopilotRun ? "disabled" : ""}>Run autopilot on this page</button><button type="button" class="btn-ghost btn-small" data-act="link-start">Change cards</button></div>
+        </div>`;
+    }
+    return `<div class="page-block">
+        <div class="row-main"><div class="row-title">${p.bank ? `${esc(p.site)} isn't linked to your cards yet` : `No cards linked to ${esc(p.site)}`}</div></div>
+        <div class="action-row"><button type="button" class="${p.bank ? "btn-primary" : "btn-ghost"} btn-small" data-act="link-start">Link cards to this site</button></div>
+    </div>`;
+}
+
 function cardsPanel() {
-    const action = `<div class="action-row">${state.cards?.length ? `<button type="button" class="btn-ghost btn-small" data-act="run-autopilot" ${state.autopilotRun ? "disabled" : ""}>Run autopilot</button>` : ""}${headLink(`${base()}/cards`, "All cards")}</div>`;
+    const action = headLink(`${base()}/cards`, "All cards");
     if (!state.cards) return panel("Your cards", action, placeholderRows());
     if (!state.cards.length) return panel("Your cards", headLink(`${base()}/cards`, "Add a card"), emptyState("No cards yet"));
     const active = state.session?.cardId;
     const list = [...state.cards].sort((a, b) => (b.id === active) - (a.id === active) || String(a.displayName).localeCompare(String(b.displayName)));
-    return panel("Your cards", action, `<div class="panel-body"><ul class="rows">${list.map(cardRow).join("")}</ul></div>`);
+    // All cards at the bottom, after the list.
+    const foot = `<div class="panel-foot-actions"><button type="button" class="btn-ghost btn-small" data-act="run-autopilot" ${state.autopilotRun ? "disabled" : ""}>Run autopilot for all cards</button><a class="btn-ghost btn-small" href="${esc(base())}/cards" data-act="open-link">Add cards</a></div>`;
+    return panel("Your cards", action, `${pageBlock()}<div class="panel-body"><ul class="rows">${list.map(cardRow).join("")}</ul></div>${foot}`);
 }
 
 const useRow = (kind, id, title, sub, amount) => `<li class="row" data-${kind}="${esc(id)}">
@@ -452,6 +483,26 @@ const actions = {
         const r = await send({ type: "runAutopilot", cardIds: ids });
         if (!r.ok) toast(r.error || "Couldn't start autopilot", { kind: "error" });
         else toast(ids.length === 1 ? "Autopilot started" : ids.length ? `Autopilot started for ${ids.length} cards` : "Autopilot started for all cards");
+    },
+    async "run-autopilot-page"() {
+        const p = state.page;
+        if (!p?.cardIds.length) return;
+        if (!(await ensureSiteAccess(p.url))) return toast(`Allow access to ${p.site} first`, { kind: "error" });
+        const r = await send({ type: "runAutopilot", cardIds: p.cardIds, tabId: p.tabId });
+        if (!r.ok) toast(r.error || "Couldn't start autopilot", { kind: "error" });
+        else { toast(`Autopilot started on ${p.site}`); try { await chrome.tabs.update(p.tabId, { active: true }); } catch { /* tab closed */ } }
+    },
+    "link-start"() { state.linking = true; render(); },
+    "link-cancel"() { state.linking = false; render(); },
+    async "link-save"(el) {
+        const p = state.page;
+        const ids = [...app.querySelectorAll(".link-list input:checked")].map((i) => i.value);
+        if (!ids.length) return toast("Tick at least one card", { kind: "error" });
+        if (!(await ensureSiteAccess(p.url))) return toast(`Allow access to ${p.site} first`, { kind: "error" });
+        const r = await send({ type: "linkCardsToSite", tabId: p.tabId, cardIds: ids, run: el.dataset.value === "run" });
+        if (!r.ok) return toast(r.error || "Couldn't save", { kind: "error" });
+        toast(el.dataset.value === "run" ? `Autopilot started on ${p.site}` : `${ids.length} ${ids.length === 1 ? "card" : "cards"} linked to ${p.site}`);
+        loadSite(true);
     },
     async "stop-autopilot"() { await send({ type: "stopAutopilot" }); toast("Autopilot stopped"); },
     async "toggle-autopilot"(el) {

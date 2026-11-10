@@ -4,27 +4,34 @@
 (function () {
     if (window.__finsStatus) return;
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-    let host = null, root = null, hideTimer = 0;
+    let host = null, root = null, hideTimer = 0, keep = null;
 
     function mount() {
         if (host?.isConnected) return;
+        keep?.disconnect();
+        host?.remove();
         host = document.createElement("div");
         host.id = "fins-status-root";
         host.innerHTML = '<div class="fins-prompt fins-status" role="status" aria-live="polite"></div>';
         document.documentElement.appendChild(host);
+        // Some sites redraw the whole page: put the note back until it's hidden.
+        keep = new MutationObserver(() => { if (host && !host.isConnected) document.documentElement.appendChild(host); });
+        keep.observe(document.documentElement, { childList: true });
         root = host.firstElementChild;
         root.addEventListener("click", (event) => {
             const btn = event.target.closest("[data-action]");
             if (!btn) return;
             const action = btn.dataset.action;
             if (action === "close") hide();
-            chrome.runtime.sendMessage({ type: "statusAction", action }).catch(() => {});
+            try { chrome.runtime.sendMessage({ type: "statusAction", action }).catch(() => {}); } catch { /* extension reloaded */ }
         });
         requestAnimationFrame(() => root.classList.add("fins-show"));
     }
 
     function hide() {
         clearTimeout(hideTimer);
+        keep?.disconnect();
+        keep = null;
         if (!root) return;
         root.classList.remove("fins-show");
         const old = host;

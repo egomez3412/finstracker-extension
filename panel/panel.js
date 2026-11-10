@@ -11,7 +11,7 @@ const state = {
     tab: "cards", // cards | credits | offers
     user: null,
     apiBase: PRODUCTION,
-    settings: { autoDetect: true, checkoutHints: false, theme: "system", addOffersToCard: true, recordActivity: true, autopilotAuto: false, launcherOn: true },
+    settings: { autoDetect: true, checkoutHints: false, theme: "system", addOffersToCard: true, recordActivity: true, autopilotAuto: false, launcherOn: true, autoAddCards: true },
     launcherHidden: {}, // sites where the quick tab was hidden
     autopilot: {}, // cardId → { on, lastRun, results }
     page: null, // the open tab: { tabId, url, site, bank, cardIds } (cards linked to its site)
@@ -368,6 +368,7 @@ function settingsView() {
             ${line("Add offers to my cards", toggle("toggle-setting", s.addOffersToCard, "Add offers to my cards", "addOffersToCard"))}
             ${line("Record points activity", toggle("toggle-setting", s.recordActivity, "Record points activity", "recordActivity"))}
             ${line("Daily autopilot when signed in", toggle("toggle-setting", s.autopilotAuto, "Daily autopilot when signed in", "autopilotAuto"))}
+            ${line("Autopilot adds new cards it finds", toggle("toggle-setting", s.autoAddCards, "Autopilot adds new cards it finds", "autoAddCards"))}
         </ul></div>`)}
         ${panel("Appearance", "", `<div class="panel-body"><ul class="rows">${line("Theme", `<div class="seg" role="tablist" aria-label="Theme">${theme("system", "System")}${theme("light", "Light")}${theme("dark", "Dark")}</div>`)}</ul></div>`)}
         ${panel("Rewards pages", "", `<div class="panel-body form-stack">
@@ -378,7 +379,11 @@ function settingsView() {
             ${picked ? `${state.pages[picked.id] ? `<dl class="summary-list"><div><dt>Saved page</dt><dd>${esc(hostOf(state.pages[picked.id].url))}</dd></div></dl>` : ""}
             <div class="action-row"><button type="button" class="btn-primary btn-small" data-act="configure" data-id="${esc(picked.id)}">Open portal and pick</button><button type="button" class="btn-ghost btn-small" data-act="use-tab" data-id="${esc(picked.id)}">Use current tab</button>${state.overrides[picked.id] || state.pages[picked.id] ? `<button type="button" class="btn-ghost btn-small" data-act="reset-spot" data-id="${esc(picked.id)}">Reset</button>` : ""}</div>` : ""}
         </div>`)}
-        ${panel("Account", "", `<div class="panel-body"><ul class="rows"><li class="row"><div class="row-main"><div class="row-title">${esc(state.user?.username || state.user?.email || "Signed in")}</div>${state.apiBase !== PRODUCTION ? `<div class="row-sub">${esc(state.apiBase)}</div>` : ""}</div><button type="button" class="btn-ghost btn-small btn-danger-text" data-act="signout">Sign out</button></li></ul></div>`)}
+        ${panel("Account", "", `<div class="panel-body"><ul class="rows"><li class="row"><div class="row-main"><div class="row-title">${esc(state.user?.username || state.user?.email || "Signed in")}</div>${state.apiBase !== PRODUCTION ? `<div class="row-sub">${esc(state.apiBase)}</div>` : ""}</div><button type="button" class="btn-ghost btn-small btn-danger-text" data-act="signout">Sign out</button></li>
+            ${state.confirmReset
+                ? `<li class="row row-confirm"><div class="row-main"><div class="row-title">Delete all ${(state.cards || []).length} cards?</div><div class="row-sub">Their offers and credits on Finstracker go too, and the extension forgets what it learned. This can't be undone.</div></div><div class="action-row"><button type="button" class="btn-ghost btn-small" data-act="reset-cancel">Cancel</button><button type="button" class="btn-primary btn-small btn-danger" data-act="reset-confirm">Delete everything</button></div></li>`
+                : `<li class="row"><div class="row-main"><div class="row-title">Start over</div><div class="row-sub">Delete every card, offer and credit on this account</div></div><button type="button" class="btn-ghost btn-small btn-danger-text" data-act="reset-ask">Delete all</button></li>`}
+        </ul></div>`)}
     </div>`;
 }
 
@@ -650,6 +655,17 @@ const actions = {
     },
     async "reset-spot"(el) { await send({ type: "clearOverride", cardId: el.dataset.id }); toast("Rewards page and balance spot reset"); },
     async signout() { await send({ type: "logout" }); toast("Signed out"); },
+    "reset-ask"() { state.confirmReset = true; render(); },
+    "reset-cancel"() { state.confirmReset = false; render(); },
+    async "reset-confirm"(el) {
+        el.disabled = true; el.textContent = "Deleting…";
+        const r = await send({ type: "resetAccount" });
+        state.confirmReset = false;
+        if (r?.signedOut) return toast("Sign in first", { kind: "error" });
+        toast(r?.ok ? `Deleted ${r.cards} cards, ${r.offers} offers and ${r.credits} credits` : r?.error || "Couldn't delete everything", { kind: r?.ok ? "" : "error" });
+        state.view = "home";
+        await Promise.all([loadCards({ fresh: true }), loadCredits(), loadOffers()]);
+    },
 };
 
 app.addEventListener("click", (event) => {
@@ -697,7 +713,7 @@ onChanged((changes) => {
     if (changes.theme) { state.settings.theme = changes.theme.newValue || "system"; applyTheme(state.settings.theme); }
     if (changes.autoDetect) state.settings.autoDetect = changes.autoDetect.newValue !== false;
     if (changes.checkoutHints) state.settings.checkoutHints = Boolean(changes.checkoutHints.newValue);
-    for (const key of ["addOffersToCard", "recordActivity", "launcherOn"]) if (changes[key]) state.settings[key] = changes[key].newValue !== false;
+    for (const key of ["addOffersToCard", "recordActivity", "launcherOn", "autoAddCards"]) if (changes[key]) state.settings[key] = changes[key].newValue !== false;
     if (changes.launcherHidden) state.launcherHidden = changes.launcherHidden.newValue || {};
     if (changes.autopilotAuto) state.settings.autopilotAuto = Boolean(changes.autopilotAuto.newValue);
     if (changes.autopilot) state.autopilot = changes.autopilot.newValue || {};
@@ -719,7 +735,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
 /* ---------- start ---------- */
 
 (async () => {
-    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "autoDetect", "checkoutHints", "theme", "cardsCache", "addOffersToCard", "recordActivity", "autopilotAuto", "autopilot", "autopilotRun", "launcherOn", "launcherHidden"]);
+    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "autoDetect", "checkoutHints", "theme", "cardsCache", "addOffersToCard", "autoAddCards", "recordActivity", "autopilotAuto", "autopilot", "autopilotRun", "launcherOn", "launcherHidden"]);
     applyTheme(s.theme);
     Object.assign(state, {
         user: s.user,
@@ -727,7 +743,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
         session: s.captureSession,
         overrides: s.portalOverrides || {},
         pages: s.rewardsPages || {},
-        settings: { autoDetect: s.autoDetect !== false, checkoutHints: Boolean(s.checkoutHints), theme: s.theme || "system", addOffersToCard: s.addOffersToCard !== false, recordActivity: s.recordActivity !== false, autopilotAuto: Boolean(s.autopilotAuto), launcherOn: s.launcherOn !== false },
+        settings: { autoDetect: s.autoDetect !== false, checkoutHints: Boolean(s.checkoutHints), theme: s.theme || "system", addOffersToCard: s.addOffersToCard !== false, recordActivity: s.recordActivity !== false, autopilotAuto: Boolean(s.autopilotAuto), launcherOn: s.launcherOn !== false, autoAddCards: s.autoAddCards !== false },
         launcherHidden: s.launcherHidden || {},
         autopilot: s.autopilot || {},
         autopilotRun: s.autopilotRun || null,

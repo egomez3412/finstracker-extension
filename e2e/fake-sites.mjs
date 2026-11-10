@@ -24,6 +24,8 @@ export function startServer({ port = 3000 } = {}) {
         ],
         offers: [],
         newCard: false, // the switcher also lists a card the user hasn't added to Finstracker
+        urlKeyed: false, // like Amex: the page address (?account_key=) picks the card, and every link carries it
+        log: [], // [{ t, cardId, kind }] when balances and offers were saved
         created: [],
         get points() { return this.cards.c1.currentPoints; },
     };
@@ -65,9 +67,10 @@ export function startServer({ port = 3000 } = {}) {
                 if (card.rewardType === "cashback") card.currentCashBack = Math.round((card.currentCashBack + sign * t.amount) * 100) / 100;
                 else card.currentPoints += sign * t.amount;
                 state.transactions.push(t);
+                state.log.push({ t: Date.now(), cardId: t.cardId, kind: "balance" });
                 return json(res, { transaction: t }, 201);
             }
-            if (group === "perks" && !id) return json(res, url.searchParams.get("status") === "available" ? state.perks.filter((x) => !x.used) : state.perks);
+            if (group === "perks" && !id && req.method === "GET") return json(res, url.searchParams.get("status") === "available" ? state.perks.filter((x) => !x.used) : state.perks);
             if (group === "perks" && id && req.method === "PUT") {
                 const perk = state.perks.find((x) => x.id === id);
                 Object.assign(perk, { used: Boolean((await readBody(req)).used) });
@@ -75,8 +78,30 @@ export function startServer({ port = 3000 } = {}) {
             }
             if (group === "offers" && id === "bulk") {
                 const b = await readBody(req);
-                for (const o of b.offers) state.offers.push({ ...o, cardId: b.cardId });
-                return json(res, { received: b.offers.length, created: b.offers.length, updated: 0 }, 201);
+                // An upsert, like the dashboard: the same offer on the same card is updated, never doubled.
+                let created = 0;
+                for (const o of b.offers) {
+                    const i = state.offers.findIndex((x) => x.cardId === b.cardId && x.merchant === o.merchant);
+                    if (i >= 0) state.offers[i] = { ...state.offers[i], ...o, activated: state.offers[i].activated || o.activated, cardId: b.cardId };
+                    else { state.offers.push({ ...o, cardId: b.cardId }); created++; }
+                }
+                state.log.push({ t: Date.now(), cardId: b.cardId, kind: "offers" });
+                return json(res, { received: b.offers.length, created, updated: b.offers.length - created }, 201);
+            }
+            if (group === "offers" && !id && req.method === "DELETE") {
+                const before = state.offers.length;
+                state.offers = state.offers.filter((o) => o.cardId !== url.searchParams.get("cardId"));
+                return json(res, { deletedCount: before - state.offers.length });
+            }
+            if (group === "perks" && !id && req.method === "DELETE") {
+                const before = state.perks.length;
+                state.perks = state.perks.filter((x) => x.cardId !== url.searchParams.get("cardId"));
+                return json(res, { deletedCount: before - state.perks.length });
+            }
+            if (group === "cards" && id && req.method === "DELETE") {
+                if (!state.cards[id]) return json(res, null, 404);
+                delete state.cards[id];
+                return json(res, null);
             }
             if (group === "offers") return json(res, []);
             return json(res, null, 404);
@@ -90,14 +115,21 @@ export function startServer({ port = 3000 } = {}) {
             const tile = (lines) => { const d = el("div"); d.className = "tile"; for (const [t, big] of lines) d.append(el("div", t, big ? "font-size:28px" : "")); return d; };
             const more = location.search.includes("more");
             const ACCOUNTS = { c1: ["Sapphire Preferred (...9876)", "OQX90"], c3: ["Gold Card (...3001)", "GLD31"], c4: ["The Platinum Card® (...1004)", "PLT04"]${state.newCard ? ', c9: ["Delta SkyMiles® Gold Card (...3004)", "DLT04"], c8: ["Hilton Honors Aspire Card (...2008)", "HLT08"]' : ""} };
-            const acct = (document.cookie.match(/acct=(c[0-9])/) || [])[1] || "c1";
+            const KEYED = ${state.urlKeyed ? "true" : "false"};
+            const byKey = Object.fromEntries(Object.entries(ACCOUNTS).map(([id, [, key]]) => [key, id]));
+            const acct = (KEYED && byKey[new URLSearchParams(location.search).get("account_key")]) || (document.cookie.match(/acct=(c[0-9])/) || [])[1] || "c1";
+            const keyed = (href) => KEYED ? href + (href.includes("?") ? "&" : "?") + "account_key=" + ACCOUNTS[acct][1] : href;
             function switcher() {
                 const h = el("header"); h.id = "acct";
                 const b = el("button", ACCOUNTS[acct][0] + " ▾"); b.setAttribute("aria-haspopup", "listbox"); b.setAttribute("aria-expanded", "false");
                 const list = el("ul"); list.setAttribute("role", "listbox"); list.hidden = true;
                 for (const [id, [name, key]] of Object.entries(ACCOUNTS)) {
                     const li = el("li", name); li.setAttribute("role", "option"); li.setAttribute("aria-selected", String(id === acct));
-                    li.addEventListener("click", () => { document.cookie = "acct=" + id + "; path=/"; history.replaceState({}, "", location.pathname + "?opaqueAccountId=" + key); location.reload(); });
+                    li.addEventListener("click", () => {
+                        document.cookie = "acct=" + id + "; path=/";
+                        if (KEYED) { location.href = location.pathname + "?account_key=" + key; return; }
+                        history.replaceState({}, "", location.pathname + "?opaqueAccountId=" + key); location.reload();
+                    });
                     list.append(li);
                 }
                 b.addEventListener("click", () => { list.hidden = !list.hidden; b.setAttribute("aria-expanded", String(!list.hidden)); });
@@ -107,7 +139,7 @@ export function startServer({ port = 3000 } = {}) {
             function nav() {
                 const n = el("nav");
                 for (const [href, text, spa] of [["/bank/help", "Help"], ["/bank/offers", "Offers"], ["/bank/benefits", "Benefits"], ["/bank/rewards?opaqueAccountId=OQX90", "Ultimate Rewards"], ["/bank/rewards?opaqueAccountId=OQX90", "Rewards (in-app)", true]]) {
-                    const a = el("a", text); a.href = href;
+                    const a = el("a", text); a.href = keyed(href);
                     if (spa) { a.id = "spa-link"; a.addEventListener("click", (e) => { e.preventDefault(); history.pushState({}, "", href); setTimeout(draw, 800); }); }
                     n.append(a, " ");
                 }
@@ -167,6 +199,8 @@ export function startServer({ port = 3000 } = {}) {
                         tile([["Freedom Unlimited (...1234)"], ["Cash back rewards"], ["12,345", true], ["points"]]),
                         acct === "c3" ? tile([["Gold Card (...3001)"], ["Membership Rewards"], ["45,000", true], ["points"]])
                             : acct === "c4" ? tile([["The Platinum Card® (...1004)"], ["Membership Rewards"], ["150,000", true], ["points"]])
+                            : acct === "c9" ? tile([["Delta SkyMiles® Gold Card (...3004)"], ["SkyMiles"], ["62,000", true], ["miles"]])
+                            : acct === "c8" ? tile([["Hilton Honors Aspire Card (...2008)"], ["Hilton Honors"], ["250,000", true], ["points"]])
                             : tile([["Sapphire Preferred (...9876)"], ["Ultimate Rewards"], [more ? "99,265" : "98,765", true], ["points"]]),
                         tile([["Blue Cash Everyday (...5555)"], ["Statement balance"], ["$642.10"], ["Reward Dollars"], ["$123.45", true]]),
                     );
@@ -178,7 +212,12 @@ export function startServer({ port = 3000 } = {}) {
                 } else if (location.pathname === "/bank/offers") {
                     const decoy = el("button", "Add card"); decoy.addEventListener("click", () => { document.body.dataset.decoy = "clicked"; });
                     root.append(decoy);
+                    // Like Amex: the list arrives late (so one card's offers are still running while
+                    // the next card is selected).
+                    if (KEYED && !window.__offersReady) { root.append(el("p", "Loading offers…")); setTimeout(() => { window.__offersReady = true; draw(); }, 5000); return; }
                     const offers = acct === "c3" ? [["Saks", "Spend $250, get $50 back", false], ["Hilton", "Earn 5,000 points", false]]
+                        : acct === "c9" ? [["Delta Stays", "Spend $200 or more, earn $50", false]]
+                        : acct === "c8" ? [["Hilton Resorts", "Earn 10,000 points", false]]
                         : acct === "c4" ? [["Resy", "Spend $100, get $20 back", false]]
                         : [["Best Buy", "Spend $100, get $15 back", false], ["Chipotle", "5% back", true], ["Delta", "Earn 2,000 points", false]];
                     for (const [merchant, badge, added] of offers) {
@@ -220,6 +259,30 @@ export function startServer({ port = 3000 } = {}) {
                         root.append(more);
                     }
                     window.__addedCount = () => state.added.size;
+                } else if (location.pathname === "/bank/amex-eligible" || location.pathname === "/bank/amex-enrolled") {
+                    // Like Amex: an offer leaves this list once added (the list redraws), and moves to
+                    // "Added to Card", a page of its own that also has the offers added before.
+                    const added = new Set(JSON.parse(sessionStorage.getItem("added") || "[]"));
+                    const all = [["Best Buy", "Spend $100, get $15 back"], ["Duolingo", "Spend $75 or more, earn $30"], ["Glasses.com", "Earn +2 Membership Rewards® points per eligible dollar spent, up to 4,000 pts"],
+                        ["Dell", "$10 statement credit"], ["Audible", "Spend $20 or more, earn $5"], ["Lyft", "Spend $25, get $5 back"]];
+                    const before = [["Saks", "Spend $50 or more, earn $10"], ["Uber Eats", "Earn 1,000 Membership Rewards® points"], ["Walmart", "Spend $35 or more, earn $7"]];
+                    const link = el("a", "Added to Card (" + (before.length + added.size) + ")"); link.href = "/bank/amex-enrolled";
+                    root.append(link);
+                    const list = el("div"); list.id = "offer-list"; root.append(list);
+                    const drawList = () => {
+                        list.replaceChildren();
+                        const rows = location.pathname === "/bank/amex-enrolled" ? [...before, ...all.filter(([m]) => added.has(m))] : all.filter(([m]) => !added.has(m));
+                        for (const [merchant, badge] of rows) {
+                            const t = tile([[merchant], [badge], ["Expires 12/31/26"]]);
+                            if (location.pathname === "/bank/amex-eligible") {
+                                const b = el("button", ""); b.title = "add to list card"; b.append(el("span", "+")); b.style.cssText = "width:28px;height:28px";
+                                b.addEventListener("click", () => { added.add(merchant); sessionStorage.setItem("added", JSON.stringify([...added])); setTimeout(drawList, 250); });
+                                t.append(b);
+                            }
+                            list.append(t);
+                        }
+                    };
+                    drawList();
                 } else if (location.pathname === "/bank/amex-benefits") {
                     // Amex-style benefits: usage hidden in collapsed "View details" sections.
                     for (const [name, detail] of [["Uber Cash", "Earned $15.00 of $15.00"], ["Digital Entertainment Credit", "$5.00 used · $15.00 remaining"], ["Saks Fifth Avenue Credit", "Credit received"], ["Walmart+ Credit", "$0.00 remaining"]]) {
@@ -249,7 +312,7 @@ export function startServer({ port = 3000 } = {}) {
             setTimeout(draw, 1200);`, h);
         if (p === "/bank/login" && req.method === "POST") { res.writeHead(302, { location: "/bank/dashboard", "set-cookie": "bank=1; Path=/" }); return res.end(); }
         const signedIn = /(^|;\s*)bank=1/.test(req.headers.cookie || "");
-        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance", "/bank/amex-home", "/bank/amex-hub", "/bank/amex-hub/activity"];
+        const pages = ["/bank/dashboard", "/bank/rewards", "/bank/offers", "/bank/benefits", "/bank/amex-offers", "/bank/amex-benefits", "/bank/no-balance", "/bank/amex-home", "/bank/amex-hub", "/bank/amex-hub/activity", "/bank/amex-eligible", "/bank/amex-enrolled"];
         if (pages.includes(p) && !signedIn) { res.writeHead(302, { location: "/bank/login" }); return res.end(); }
         if (p === "/bank/login") return send(res, 200, "text/html", page("Sign in", `<form method="post" action="/bank/login"><input name="user" autocomplete="username"><input type="password" name="pw"><button>Sign in</button></form>`), h);
         if (p === "/bank/rewards") h["content-security-policy"] = `${csp}; require-trusted-types-for 'script'`;

@@ -130,3 +130,12 @@ test('personal nicknames are not required in an issuer card selector',()=>{
  assert.deepEqual(nameWords({displayName:'Amex Corporate (Deloitte)',issuer:'American Express'}),['corporate']);
  assert.deepEqual(distinctWords({displayName:'Amex Corporate (Deloitte)'},[{displayName:'Amex Gold'}]),['corporate']);
 });
+test('Universal uses its actual FNBO issuer and official sign-in portal',()=>{
+ const card={displayName:'Universal Studios card',issuer:'Rewards',cardKey:'universal-rewards-plus'};
+ assert.equal(cardIssuer(card),'FNBO');
+ const portal=resolvePortal(card,{},portals,{});
+ assert.equal(portal.loginUrl,'https://auth.securebanklogin.com/?brand=universal');
+ assert.equal(urlMatches(portal.matchUrl,'https://auth.securebanklogin.com/?brand=universal'),true);
+ assert.equal(urlMatches(portal.matchUrl,'https://www.card.fnbo.com/universal'),true);
+ assert.equal(urlMatches(portal.matchUrl,'https://unrelated.example/'),false);
+});

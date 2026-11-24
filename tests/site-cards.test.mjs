@@ -77,3 +77,20 @@ test('a nicknamed corporate card matches its issuer product and learns its numbe
  const found=newSiteCards([{name:'Corporate Card',last4:'1001'}],user,{issuer:'American Express'});
  assert.deepEqual(found.matched,{corp:'1001'});assert.equal(found.fresh.length,0);
 });
+
+
+test("generic FNBO Signature labels require a known card ending and never create products", () => {
+    const user = [{ id: "universal", displayName: "Universal Studios card" }];
+    const site = ["3648", "9747", "3238"].map(last4 => ({ name: "Signature", last4 }));
+    assert.deepEqual(newSiteCards(site, user, { issuer: "FNBO" }), { fresh: [], matched: {} });
+    assert.deepEqual(newSiteCards(site, user, { issuer: "FNBO", last4s: { universal: "9747" } }), { fresh: [], matched: { universal: "9747" } });
+});
+
+test("duplicate product names wait for confirmed endings instead of choosing the first card", () => {
+    const user = [{ id: "one", displayName: "Sapphire Preferred" }, { id: "two", displayName: "Chase Sapphire Preferred" }];
+    const site = { name: "Sapphire Preferred", last4: "4087" };
+    assert.equal(matchUserCard(site, user), null);
+    assert.deepEqual(newSiteCards([site], user, { issuer: "Chase" }), { fresh: [], matched: {} });
+    assert.equal(matchUserCard(site, user, { one: "4087" })?.id, "one");
+    assert.equal(matchUserCard(site, user, { one: "4087", two: "4087" }), null);
+});

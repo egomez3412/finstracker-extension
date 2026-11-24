@@ -196,3 +196,7 @@ main { display: grid; gap: 16px; padding: 4px 16px 24px; }
 .row-confirm { flex-wrap: wrap; gap: 8px; }
 .row-confirm .action-row { margin-left: auto; }
 .btn-danger { background: var(--color-red); border-color: var(--color-red); }
+
+.card-ending { display: grid; gap: 8px; margin: 12px 0 16px; }
+.card-ending label { font-size: 12px; font-weight: 600; }
+.card-ending .select { width: 128px; min-width: 0; height: 36px; }

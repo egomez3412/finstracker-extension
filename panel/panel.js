@@ -18,6 +18,7 @@ const state = {
     linking: false, // showing "Which of your cards use this site?"
     autopilotRun: null, // { running, total, index, cardName, step }
     overrides: {},
+    cardLast4: {},
     pages: {}, // cardId → { url, source } where the balance was found or the user set it
     session: null,
     cards: null,
@@ -248,6 +249,14 @@ function cardRow(card) {
                 ${override ? `<div><dt>Balance spot</dt><dd>${override.source === "user-picker" ? "Your pick" : "Learned"}</dd></div>` : ""}
                 ${ap.lastRun ? `<div><dt>Last autopilot</dt><dd>${esc(ago(new Date(ap.lastRun).toISOString()))}</dd></div>${Object.entries(ap.results || {}).map(([k, v]) => `<div><dt>${esc(k[0].toUpperCase() + k.slice(1))}</dt><dd title="${esc(v)}">${esc(v)}</dd></div>`).join("")}` : ""}
             </dl>
+            <div class="card-ending">
+                <label for="ending-${esc(card.id)}">Card ending</label>
+                <div class="action-row">
+                    <input class="select" id="ending-${esc(card.id)}" data-card-ending aria-label="Card ending for ${esc(card.displayName)}" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="Last 4 digits" value="${esc(state.cardLast4[card.id] || "")}">
+                    <button type="button" class="btn-ghost btn-small" data-act="save-card-ending" data-id="${esc(card.id)}">Save ending</button>
+                </div>
+                <span class="row-sub">Matches this card when the bank uses a different name.</span>
+            </div>
             <div class="action-row">
                 <button type="button" class="btn-primary btn-small" data-act="run-autopilot" data-id="${esc(card.id)}">Run autopilot</button>
                 <button type="button" class="btn-ghost btn-small" data-act="update" data-id="${esc(card.id)}">Update ${card.rewardType === "cashback" ? "cash back" : "points"}</button>
@@ -486,6 +495,17 @@ const actions = {
         el.closest(".row-wrap").classList.toggle("open", state.open.has(id));
         el.setAttribute("aria-expanded", String(state.open.has(id)));
     },
+    async "save-card-ending"(el) {
+        const id = el.dataset.id;
+        const value = el.closest("[data-card]").querySelector("[data-card-ending]").value.trim();
+        if (value && !/^\d{4}$/.test(value)) return toast("Enter exactly four digits, or leave blank to clear.", { kind: "error" });
+        const { cardLast4 = {} } = await getState(["cardLast4"]);
+        const next = { ...cardLast4 };
+        if (value) next[id] = value; else delete next[id];
+        await setState({ cardLast4: next });
+        toast(value ? "Card ending saved" : "Card ending cleared");
+        loadSite(true);
+    },
     async update(el) {
         const card = cardById(el.dataset.id);
         const live = state.session && state.session.cardId === card.id && ["opening", "awaiting-login", "watching"].includes(state.session.status);
@@ -715,6 +735,7 @@ onChanged((changes) => {
         state.autopilotRun = changes.autopilotRun.newValue || null;
         if (was && !state.autopilotRun) { loadCards({ fresh: true }); loadCredits(); loadOffers(); }
     }
+    if (changes.cardLast4) state.cardLast4 = changes.cardLast4.newValue || {};
     if (changes.portalOverrides) state.overrides = changes.portalOverrides.newValue || {};
     if (changes.rewardsPages) state.pages = changes.rewardsPages.newValue || {};
     if (changes.apiBase) state.apiBase = changes.apiBase.newValue || PRODUCTION;
@@ -728,13 +749,14 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
 /* ---------- start ---------- */
 
 (async () => {
-    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "autoDetect", "checkoutHints", "theme", "cardsCache", "addOffersToCard", "autoAddCards", "recordActivity", "autopilotAuto", "autopilot", "autopilotRun", "launcherOn", "launcherHidden"]);
+    const s = await getState(["token", "user", "apiBase", "captureSession", "portalOverrides", "rewardsPages", "cardLast4", "autoDetect", "checkoutHints", "theme", "cardsCache", "addOffersToCard", "autoAddCards", "recordActivity", "autopilotAuto", "autopilot", "autopilotRun", "launcherOn", "launcherHidden"]);
     applyTheme(s.theme);
     Object.assign(state, {
         user: s.user,
         apiBase: s.apiBase,
         session: s.captureSession,
         overrides: s.portalOverrides || {},
+        cardLast4: s.cardLast4 || {},
         pages: s.rewardsPages || {},
         settings: { autoDetect: s.autoDetect !== false, checkoutHints: Boolean(s.checkoutHints), theme: s.theme || "system", addOffersToCard: s.addOffersToCard !== false, recordActivity: s.recordActivity !== false, autopilotAuto: Boolean(s.autopilotAuto), launcherOn: s.launcherOn !== false, autoAddCards: s.autoAddCards !== false },
         launcherHidden: s.launcherHidden || {},

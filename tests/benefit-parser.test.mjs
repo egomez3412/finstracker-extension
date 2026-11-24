@@ -41,3 +41,14 @@ test('reader keeps benefit tiles separate and recognizes the selected card combo
  const shown=window.__finsReader.detectCard([{id:'blue',words:['blue','cash','everyday']},{id:'platinum',words:['platinum']}]);
  assert.equal(shown.id,'blue');assert.equal(shown.strong,true);
 });
+test('Amex account selection opens a combobox even without button or popup attributes',async()=>{
+ const {window}=parseHTML('<html><body><div role="combobox" aria-label="Open to manage your other accounts">Platinum Card</div></body></html>');
+ window.HTMLElement.prototype.getBoundingClientRect=()=>({width:300,height:40,top:20});
+ let selected=false;
+ window.document.querySelector('[role=combobox]').click=()=>{
+  const option=window.document.createElement('div');option.setAttribute('role','option');option.textContent='Gold Card';option.click=()=>{selected=true;};window.document.body.append(option);
+ };
+ const ctx=vm.createContext({window,document:window.document,scrollY:0,getComputedStyle:()=>({visibility:'visible'}),setTimeout:fn=>{fn();},location:{href:'https://example.test/benefits'}});
+ vm.runInContext(readFileSync(new URL('../content/reader.js',import.meta.url),'utf8'),ctx);
+ assert.equal((await window.__finsReader.switchAccount(['gold'],[['platinum']])).clicked,true);assert.equal(selected,true);
+});

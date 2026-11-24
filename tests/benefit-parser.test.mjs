@@ -32,6 +32,7 @@ test('spend thresholds and multi-year credits are not annual cash allowances',()
 });
 test('reader keeps benefit tiles separate and recognizes the selected card combobox',()=>{
  const {window}=parseHTML('<html><body><div role="combobox" aria-label="Open to manage your other accounts">Blue Cash Everyday ••••21000</div><section><h2>$84 Disney Credit</h2><p>Get $7 back per month. Enrollment required.</p></section><section><h2>$180 Home Chef Credit</h2><p>Get $15 back per month.</p></section><div id="fins-status-root"><h2>$900 Fake Credit</h2>Annual credit. $900 earned $0 remaining</div></body></html>');
+ delete window.__finsReader;
  window.HTMLElement.prototype.getBoundingClientRect=()=>({width:300,height:40,top:20});
  const ctx=vm.createContext({window,document:window.document,scrollY:0,getComputedStyle:()=>({display:'block',visibility:'visible'}),setTimeout,clearTimeout,location:{href:'https://example.test/benefits'}});
  vm.runInContext(readFileSync(new URL('../content/benefit-parser.js',import.meta.url),'utf8'),ctx);
@@ -40,4 +41,16 @@ test('reader keeps benefit tiles separate and recognizes the selected card combo
  assert.equal(benefits.length,2);assert.ok(benefits.every(b=>!b.title.includes('Fake')));
  const shown=window.__finsReader.detectCard([{id:'blue',words:['blue','cash','everyday']},{id:'platinum',words:['platinum']}]);
  assert.equal(shown.id,'blue');assert.equal(shown.strong,true);
+});
+test('Amex account selection opens a combobox even without button or popup attributes',async()=>{
+ const {window}=parseHTML('<html><body><div role="combobox" aria-label="Open to manage your other accounts">Platinum Card</div></body></html>');
+ delete window.__finsReader;
+ window.HTMLElement.prototype.getBoundingClientRect=()=>({width:300,height:40,top:20});
+ let selected=false;
+ window.document.querySelector('[role=combobox]').click=()=>{
+  const option=window.document.createElement('div');option.setAttribute('role','option');option.textContent='Gold Card';option.click=()=>{selected=true;};window.document.body.append(option);
+ };
+ const ctx=vm.createContext({window,document:window.document,scrollY:0,getComputedStyle:()=>({visibility:'visible'}),setTimeout:fn=>{fn();},location:{href:'https://example.test/benefits'}});
+ vm.runInContext(readFileSync(new URL('../content/reader.js',import.meta.url),'utf8'),ctx);
+ assert.equal((await window.__finsReader.switchAccount(['gold'],[['platinum']])).clicked,true);assert.equal(selected,true);
 });

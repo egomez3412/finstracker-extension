@@ -839,7 +839,7 @@
             const seen = detectCard([{ id: "this", words: want }, ...otherSets.map((ws, i) => ({ id: `other${i}`, words: ws }))]);
             return Boolean(seen && seen.strong && seen.id === "this");
         };
-        const anySwitcher = () => [...document.querySelectorAll("[aria-haspopup], [role='listbox'], [role='tablist'], [role='option']")].some(shown)
+        const anySwitcher = () => [...document.querySelectorAll("[role='combobox'], [aria-haspopup], [role='listbox'], [role='tablist'], [role='option']")].some(shown)
             || [...document.querySelectorAll("button, a")].some((el) => shown(el) && otherSets.some((ws) => names(text(el), ws)));
         // Bank pages draw late: give the switcher a few seconds to appear.
         for (let i = 0; i < 10 && !alreadySelected() && !anySwitcher(); i++) await pause(500);
@@ -853,7 +853,7 @@
         let opener = null;
         if (!target) {
             // Open the switcher: a popup button naming another card, or one labelled as a card/account picker.
-            opener = [...document.querySelectorAll("[aria-haspopup], [aria-expanded='false'], button")]
+            opener = [...document.querySelectorAll("[role='combobox'], [aria-haspopup], [aria-expanded='false'], button")]
                 .filter((el) => shown(el))
                 .find((el) => { const t = text(el); return t.length <= 90 && !OFFER.test(t) && (otherSets.some((ws) => names(t, ws)) || /switch (card|account)|select (a )?(card|account)|change (card|account)|my accounts|all accounts|manage your other accounts/.test(t)); }) || null;
             if (opener) {

@@ -1,5 +1,5 @@
 {
-  "_comment": "Portal mappings used by the Fins Sync extension. Resolution order per card: portalOverrides[cardId] → cards[cardKey] → issuers[issuer] → none. 'matchUrl' is a glob (`*` wildcards) that decides which navigations the extractor runs on. 'selector' is a comma-separated CSS selector list whose visible text is scanned for the first plausible balance; if no selector matches the heuristic scorer in background.js takes over.",
+  "_comment": "Portal mappings used by the Fins Sync extension. Resolution order per card: portalOverrides[cardId] \u2192 cards[cardKey] \u2192 issuers[issuer] \u2192 none. 'matchUrl' is a glob (`*` wildcards) that decides which navigations the extractor runs on. 'selector' is a comma-separated CSS selector list whose visible text is scanned for the first plausible balance; if no selector matches the heuristic scorer in background.js takes over.",
   "issuers": {
     "American Express": {
       "loginUrl": "https://www.americanexpress.com/en-us/account/login",
@@ -60,6 +60,15 @@
       "pointsUrlHint": "https://www.barclaycardus.com/servicing/rewards",
       "matchUrl": "https://*.barclaycardus.com/*",
       "selector": "[data-testid*='rewards-balance'], [class*='rewards-balance'], [class*='rewardsBalance']"
+    },
+    "FNBO": {
+      "loginUrl": "https://auth.securebanklogin.com/?brand=universal",
+      "pointsUrlHint": null,
+      "matchUrl": [
+        "https://*.securebanklogin.com/*",
+        "https://*.fnbo.com/*"
+      ],
+      "selector": null
     }
   },
   "cards": {
@@ -166,9 +175,13 @@
       "selector": "[data-testid='mileage-balance'], [data-testid*='miles-balance'], [aria-label*='miles balance'], [class*='MileagePlan'] [class*='balance']"
     },
     "universal-rewards-plus": {
-      "_note": "Demo / fictional card — no real portal. Users can use Configure to set a custom URL and selector if they want to sync from a personal page.",
+      "loginUrl": "https://auth.securebanklogin.com/?brand=universal",
       "pointsUrlHint": null,
-      "selector": ""
+      "matchUrl": [
+        "https://*.securebanklogin.com/*",
+        "https://*.fnbo.com/*"
+      ],
+      "selector": null
     }
   }
 }

@@ -72,3 +72,8 @@ test("bank accounts in an Amex switcher are not cards", () => {
     assert.deepEqual(cleanSiteCardName("Corporate Card ••••91007"), { name: "Corporate Card", last4: "1007" });
     assert.deepEqual(cleanSiteCardName("American Express Gold Card ••••41002"), { name: "American Express Gold Card", last4: "1002" });
 });
+test('a nicknamed corporate card matches its issuer product and learns its number',()=>{
+ const user=[{id:'corp',displayName:'Amex Corporate (Deloitte)'}];
+ const found=newSiteCards([{name:'Corporate Card',last4:'1001'}],user,{issuer:'American Express'});
+ assert.deepEqual(found.matched,{corp:'1001'});assert.equal(found.fresh.length,0);
+});

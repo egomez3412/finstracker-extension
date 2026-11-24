@@ -540,12 +540,15 @@
     // True when the page shows a sign-in or verification form.
     function signInShown() {
         try {
-            if (document.querySelector('input[type="password"]:not([disabled])')) return true;
-            if (document.querySelector('input[autocomplete*="password" i]')) return true;
+            const visible = el => {
+                const rect = el.getBoundingClientRect(), style = getComputedStyle(el);
+                return rect.width > 2 && rect.height > 2 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+            };
+            if ([...document.querySelectorAll('input[type="password"]:not([disabled]), input[autocomplete*="password" i]')].some(visible)) return true;
             const userInput = document.querySelector(
                 'input[name*="user" i], input[autocomplete*="username" i], input[id*="user" i]'
             );
-            if (userInput) {
+            if (userInput && visible(userInput)) {
                 // Username alone is weak — only count it on a small page
                 // with no large content area (true login forms).
                 const txt = (document.body?.innerText || "").length;
@@ -703,7 +706,7 @@
         const AVOID = new Set(avoid || []);
         const BAD = /\b(apply|learn more|terms|faq|help|support|sign ?(out|in|on)|log ?(out|in|on)|refer|privacy|careers|español|compare|enroll|disclosures?)\b/;
         const site = (h) => h.split(".").slice(-2).join(".");
-        const here = location.href.split("#")[0];
+        const here = location.href;
         let best = null;
         for (const el of document.querySelectorAll("a[href], [role='link'], [role='tab'], button, [role='menuitem'], [role='button']")) {
             const r = el.getBoundingClientRect();
@@ -720,7 +723,7 @@
                     if (!/^https?:$/.test(u.protocol) || site(u.hostname) !== site(location.hostname)) continue;
                     href = u.href;
                 } catch { continue; }
-                if (AVOID.has(href) || href.split("#")[0] === here) continue;
+                if (AVOID.has(href) || href === here) continue;
             } else if (AVOID.has(`text:${text}`)) continue;
             const score = 100 - hit * 5 + (el.getAttribute("role") === "tab" ? 2 : 0) - text.length / 10;
             if (!best || score > best.score) best = { el, href, text, score };
@@ -755,48 +758,32 @@
     // Reads tiles such as "Uber Cash · $10 of $10 used", "Digital Entertainment · $0 remaining",
     // "Saks credit · Completed", and progress bars (aria-valuenow / aria-valuemax).
     function readBenefits() {
-        const money = (s) => Number(String(s).replace(/[$,\s]/g, ""));
-        const OF = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:of|\/|out of)\s*\$\s?([\d,]+(?:\.\d{2})?)/i;
-        const USED = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:used|earned|redeemed|spent|received|credited|applied)|(?:used|earned|redeemed|spent|received|credited)\s*:?\s*\$\s?([\d,]+(?:\.\d{2})?)/i;
-        const LEFT = /\$\s?([\d,]+(?:\.\d{2})?)\s*(?:remaining|left|available|to go)/i;
-        const DONE = /\b(fully used|fully earned|earned in full|used in full|completed|complete|all used|maxed out|maximum (reached|earned)|credit (received|applied|issued)|you('ve| have) (used|earned|received) (it|this|the full|your)|no (credit|balance) (remaining|left))\b/i;
+        const parse = window.__finsBenefitParser?.parse;
+        if (!parse) return [];
+        const ours = '#fins-launcher-root, #fins-status-root, #fins-prompt-root, #fins-picker-host';
         const found = [];
-        for (const el of document.querySelectorAll("li, article, section, div, [role='listitem']")) {
-            const text = (el.innerText || "").replace(/[  ]/g, " ").trim();
-            if (text.length < 8 || text.length > 600) continue;
-            const r = el.getBoundingClientRect();
-            if (r.width < 4 || r.height < 4) continue;
-            let used = null, total = null, remaining = null;
-            const of = text.match(OF);
-            if (of) { used = money(of[1]); total = money(of[2]); }
-            const u = text.match(USED); if (u && used == null) used = money(u[1] || u[2]);
-            const l = text.match(LEFT); if (l) remaining = money(l[1]);
-            const bar = el.querySelector("[role='progressbar'][aria-valuenow]");
-            if (bar && used == null) {
-                const now = Number(bar.getAttribute("aria-valuenow")), max = Number(bar.getAttribute("aria-valuemax") || 100);
-                if (Number.isFinite(now) && max > 0) { used = now; total = max; }
-            }
-            const done = DONE.test(text);
-            if (used == null && remaining == null && !done) continue;
-            // A list of benefits (or the page around them), not one benefit.
-            if (el.querySelector("nav, header, h1, [role='navigation']") || el.querySelectorAll("h2, h3, h4, [role='heading']").length > 1 || el.querySelectorAll("[aria-expanded]").length > 1) continue;
-            // The benefit's name: a line that isn't a status ("Credit received", "$5 used", "View details").
-            const isStatus = (t) => DONE.test(t) || OF.test(t) || USED.test(t) || LEFT.test(t) || /^(view|see|show|hide|track)\b|^(used|remaining|earned|completed?|details|learn more|enrolled?)\b/i.test(t);
-            // Amex names its credits by their size ("$200 Uber Cash", "$300 Digital Entertainment
-            // Credit"): a line that starts with the amount is a name; the amount is dropped.
-            const named = (t) => !/\$\s?\d/.test(t) || /^\$\s?[\d,]+(?:\.\d{2})?\s+[a-z]/i.test(t);
-            const line = text.split(/\n+/).map((t) => t.trim()).find((t) => /[a-z]{3}/i.test(t) && t.length <= 80 && named(t) && !isStatus(t));
-            const title = line && line.replace(/^\$\s?[\d,]+(?:\.\d{2})?\s+/, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
-            if (!title || !/[a-z]{3}/i.test(title)) continue;
-            const fullyUsed = done || (total > 0 && used >= total) || (remaining === 0 && (used > 0 || total > 0 || /\$\s?0(\.00)?\s*(remaining|left)/i.test(text)));
-            found.push({ el, title, used, total, remaining, fullyUsed });
+        for (const el of document.querySelectorAll("li, article, section, div, a, button, [role='group'], [role='listitem']")) {
+            if (el.closest(ours)) continue;
+            const text = (el.innerText || el.textContent || '').replace(/[\u00a0\u202f]/g, ' ').trim();
+            if (text.length < 8 || text.length > 2400) continue;
+            const rect = el.getBoundingClientRect(), style = getComputedStyle(el);
+            if (rect.width < 4 || rect.height < 4 || style.display === 'none' || style.visibility === 'hidden') continue;
+            if (el.querySelector("nav, header, h1, [role='navigation']")) continue;
+            const headings = el.querySelectorAll("h2, h3, h4, [role='heading']");
+            if (headings.length > 1) continue;
+            const title = headings[0]?.textContent || el.getAttribute('aria-label') || text.split(/\n+/).map(line => line.trim()).find(line => /[a-z]{3}/i.test(line) && line.length <= 160);
+            if (!title) continue;
+            const benefit = parse(title, text);
+            if (benefit) found.push({ el, ...benefit });
         }
-        // Keep the smallest block for each benefit (a tile, not the list that holds it).
-        return found
-            .filter((f) => !found.some((g) => g !== f && f.el.contains(g.el) && g.title === f.title))
-            .filter((f, i, all) => all.findIndex((g) => g.title === f.title) === i)
-            .slice(0, 60)
-            .map(({ title, used, total, remaining, fullyUsed }) => ({ title: title.replace(/[®™]/g, "").trim(), used, total, remaining, fullyUsed }));
+        // Prefer a tile carrying usage to a repeated description or marketing link.
+        found.sort((a,b) => Number(b.usageKnown) - Number(a.usageKnown));
+        const unique = new Map();
+        for (const { el, ...benefit } of found) {
+            const key = `${benefit.title.toLowerCase()}|${benefit.periodEnd}`;
+            if (!unique.has(key)) unique.set(key, benefit);
+        }
+        return [...unique.values()].slice(0,60);
     }
 
     // Rewards activity lines: [{ date, description, amount }], amount negative for redemptions.
@@ -868,7 +855,7 @@
             // Open the switcher: a popup button naming another card, or one labelled as a card/account picker.
             opener = [...document.querySelectorAll("[aria-haspopup], [aria-expanded='false'], button")]
                 .filter((el) => shown(el))
-                .find((el) => { const t = text(el); return t.length <= 90 && !OFFER.test(t) && (otherSets.some((ws) => names(t, ws)) || /switch (card|account)|select (a )?(card|account)|change (card|account)|my accounts|all accounts/.test(t)); }) || null;
+                .find((el) => { const t = text(el); return t.length <= 90 && !OFFER.test(t) && (otherSets.some((ws) => names(t, ws)) || /switch (card|account)|select (a )?(card|account)|change (card|account)|my accounts|all accounts|manage your other accounts/.test(t)); }) || null;
             if (opener) {
                 opener.click();
                 await pause(700);
@@ -909,7 +896,7 @@
             }
         };
         // Strongest signals first: the switcher button and selected items, then the page's top bar and headings.
-        document.querySelectorAll("[aria-haspopup], [aria-selected='true'], [aria-current='true'], [aria-current='page'], [aria-checked='true']").forEach((el) => consider(el, 8));
+        document.querySelectorAll("[role='combobox'], [aria-haspopup], [aria-selected='true'], [aria-current='true'], [aria-current='page'], [aria-checked='true']").forEach((el) => consider(el, 8));
         document.querySelectorAll("header *, [role='banner'] *, nav *").forEach((el) => { if (el.children.length <= 3) consider(el, 5); });
         document.querySelectorAll("h1, h2, [role='heading']").forEach((el) => consider(el, 4));
         // Anything else near the top of the page that names a card on its own.

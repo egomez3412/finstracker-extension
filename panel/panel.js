@@ -319,7 +319,7 @@ function creditsPanel() {
     const list = openCredits(state.credits, today());
     if (!list.length) return panel("Credits to use", action, emptyState("No unused credits"));
     const byId = Object.fromEntries(state.cards.map((c) => [c.id, c]));
-    const row = (p) => useRow("credit", p.id, baseTitle(p.title), [byId[p.cardId]?.displayName, p.deadline ? `ends ${dueLabel(p.deadline, today())}` : "", p.capLabel].filter(Boolean).join(" · "), money((p.valueCents || 0) / 100));
+    const row = (p) => useRow("credit", p.id, baseTitle(p.title), [byId[p.cardId]?.displayName, p.deadline ? `ends ${dueLabel(p.deadline, today())}` : "", p.capLabel].filter(Boolean).join(" · "), money((p.remainingValueCents ?? p.valueCents ?? 0) / 100));
     const soon = list.filter((p) => daysUntil(p.deadline, today()) <= 30), later = list.filter((p) => daysUntil(p.deadline, today()) > 30);
     const group = (label, rows) => (rows.length ? `<li class="eyebrow group-label">${label}</li>${rows.map(row).join("")}` : "");
     return panel("Credits to use", action, `<div class="panel-body"><ul class="rows">${group("Ending within 30 days", soon)}${group("Later", later)}</ul></div>`);
@@ -564,7 +564,7 @@ const actions = {
         const r = await send({ type: "syncBenefits", card });
         if (handleSignedOut(r)) return;
         if (!r.ok) return setRowState(card.id, "error", r.error || "Couldn't check benefits");
-        setRowState(card.id, "success", r.marked.length ? `Marked used: ${r.marked.join(", ")}` : `${r.read} benefits checked, nothing new used`);
+        setRowState(card.id, "success", r.summary || `${r.read} benefits checked`);
         loadCredits();
     },
     async "sync-offers"(el) {

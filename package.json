@@ -8,6 +8,7 @@
     "e2e": "node e2e/run.mjs"
   },
   "devDependencies": {
+    "linkedom": "^0.18.12",
     "playwright-core": "1.57.0"
   }
 }

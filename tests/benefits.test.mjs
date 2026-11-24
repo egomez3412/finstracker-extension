@@ -49,3 +49,8 @@ test("due labels", () => {
     assert.equal(dueLabel(null, today), "No end date");
     assert.equal(dueLabel("2026-11-01", today), "Expired");
 });
+
+test('unknown usage does not inflate the total and partial credits use their remaining amount',()=>{
+ const data=summary({today:'2026-11-24',perks:[{valueCents:21900,remainingValueCents:1000},{valueCents:20000,usageUnknown:true}]});
+ assert.equal(data.creditsValue,10);assert.equal(data.creditsCount,1);
+});

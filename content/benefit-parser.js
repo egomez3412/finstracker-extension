@@ -33,7 +33,7 @@
             cadence = 'quarterly'; startMonth = Math.floor(currentMonth / 3) * 3; endMonth = startMonth + 2;
         } else if (/monthly|each (calendar )?month|per month|this month/i.test(text) && !/every \d+ years/i.test(text)) {
             cadence = 'monthly'; startMonth = endMonth = currentMonth;
-        } else if (/annual|calendar year|this year/i.test(text) && !/cardmember year|anniversary|every \d+ years/i.test(text)) cadence = 'annual';
+        } else if (/annual|calendar year|this year|each year|per year/i.test(text) && !/cardmember year|anniversary|every \d+ years/i.test(text)) cadence = 'annual';
 
         let used = current ? amount(current[1]) : null, remaining = null, total = null;
         const usageText = text.replace(/(?:earned|received|used) this year\s*:?\s*\$\s*[\d,.]+/gi, '');

@@ -54,3 +54,7 @@ test('Amex account selection opens a combobox even without button or popup attri
  vm.runInContext(readFileSync(new URL('../content/reader.js',import.meta.url),'utf8'),ctx);
  assert.equal((await window.__finsReader.switchAccount(['gold'],[['platinum']])).clicked,true);assert.equal(selected,true);
 });
+test('Oura each-year wording keeps the visible annual allowance and zero usage',()=>{
+ const b=parse('$200 Oura Ring Credit','$0 Earned $200 To Go Receive up to $200 back each year when you use your Platinum Card to purchase an Oura Ring through Oura. Enrollment required.');
+ assert.equal(b.total,200);assert.equal(b.used,0);assert.equal(b.remaining,200);assert.equal(b.cadence,'annual');
+});

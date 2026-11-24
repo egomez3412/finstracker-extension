@@ -126,3 +126,7 @@ test("Membership Rewards is one balance for every Amex points card on a login", 
     assert.equal(sharedProgram({ displayName: "Delta SkyMiles Gold Card", issuer: "American Express", rewardType: "points" }), null);
     assert.equal(sharedProgram({ displayName: "Sapphire Preferred", issuer: "Chase", rewardType: "points" }), null);
 });
+test('personal nicknames are not required in an issuer card selector',()=>{
+ assert.deepEqual(nameWords({displayName:'Amex Corporate (Deloitte)',issuer:'American Express'}),['corporate']);
+ assert.deepEqual(distinctWords({displayName:'Amex Corporate (Deloitte)'},[{displayName:'Amex Gold'}]),['corporate']);
+});

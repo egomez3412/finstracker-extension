@@ -413,7 +413,7 @@ function render() {
 function setRowState(cardId, kind, text) {
     state.rowState.set(cardId, { kind, text });
     render();
-    if (kind !== "syncing") {
+    if (kind === "success") {
         setTimeout(() => {
             if (state.rowState.get(cardId)?.text === text) { state.rowState.delete(cardId); render(); }
         }, kind === "success" ? 4000 : 6000);

@@ -3,7 +3,9 @@
  * Content-Security-Policy headers (most banks) cannot block it.
  * Exposes window.__finsReader: extract, watch, signInShown, findRewardsLink, highlight, clearHighlight. */
 (function () {
-    if (window.__finsReader) return;
+    // Bump this when reader behavior changes, so open issuer tabs do not retain an older reader.
+    const READER_VERSION = 2;
+    if (window.__finsReader?.version === READER_VERSION) return;
     let lastFound = null; // element of the last balance found, for highlight()
     let lastScan = []; // scored candidates from the last scan, for suggestions()
 
@@ -1115,5 +1117,5 @@
         return { rows, clicks, reachedKnown: rows.some((r) => seen.has(r.key)) };
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, readPointsHistory, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard, listSiteCards };
+    window.__finsReader = { version: READER_VERSION, extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, readPointsHistory, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard, listSiteCards };
 })();

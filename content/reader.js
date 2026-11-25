@@ -911,7 +911,9 @@
             const top = r.top + scrollY < 220 ? 3 : 0; // the bar at the top of the page
             for (const c of list) {
                 if (!c.words.every((w) => t.includes(w))) continue;
-                const s = weight + top;
+                const confirmedEnding = c.words.length === 1 && /^\d{4}$/.test(c.words[0]) &&
+                    new RegExp(`(?:\\.{3}|…|[•*x]{2,}|ending(?: in)?)\\s*${c.words[0]}\\b`, 'i').test(t);
+                const s = weight + top + (confirmedEnding ? 10 : 0);
                 const best = scores.get(c.id);
                 if (!best || s > best.score) scores.set(c.id, { id: c.id, score: s, text: t.slice(0, 80) });
             }

@@ -1,7 +1,7 @@
 // Finstracker side panel: cards and points sync, credits, offers and the best card for the open site.
 import { CATEGORY_LABELS } from "../lib/merchants.js";
 import { rateLabel } from "../lib/best-card.js";
-import { daysUntil, dueLabel, localToday, nextFeeDate, openCredits, openOffers, summary } from "../lib/benefits.js";
+import { daysUntil, dueLabel, localToday, nextFeeDate, offerRewardLabel, openCredits, openOffers, summary } from "../lib/benefits.js";
 import { PRODUCTION, getState, onChanged, setState } from "../lib/storage.js";
 import { Tracker } from "../lib/api.js";
 
@@ -343,8 +343,8 @@ function offersPanel() {
     if (!list.length) return panel("Open offers", action, emptyState("No open offers"));
     const byId = Object.fromEntries(state.cards.map((c) => [c.id, c]));
     return panel("Open offers", action, `<div class="panel-body"><ul class="rows">${list.map((o) => useRow("offer", o.id, o.merchant,
-        [byId[o.cardId]?.displayName, o.minSpendCents ? `on ${money(o.minSpendCents / 100)}+` : "", o.expiresAt ? `ends ${dueLabel(o.expiresAt, today())}` : ""].filter(Boolean).join(" · "),
-        o.valueCents ? money(o.valueCents / 100) : "")).join("")}</ul></div>`);
+        [byId[o.cardId]?.displayName, o.minSpendCents ? `on ${money(o.minSpendCents / 100)}+` : "", o.redemptionMethod === 'shopping_link' ? 'Shop through issuer' : o.activatedAt ? 'Added to card' : 'Activation unconfirmed', o.expiresAt ? `ends ${dueLabel(o.expiresAt, today())}` : ""].filter(Boolean).join(" · "),
+        offerRewardLabel(o))).join("")}</ul></div>`);
 }
 
 function autopilotStrip() {

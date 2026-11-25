@@ -16,7 +16,7 @@
     "Capital One": {
       "loginUrl": "https://verified.capitalone.com/auth/signin",
       "pointsUrlHint": "https://myaccounts.capitalone.com/rewards",
-      "matchUrl": "https://*.capitalone.com/*",
+      "matchUrl": ["https://*.capitalone.com/*", "https://capitaloneoffers.com/*"],
       "selector": "[data-testid='rewards-balance'], [data-testid*='rewards-balance'], [data-testid*='points-balance'], [class*='RewardsBalance'], [class*='rewardsBalance'], [aria-label*='rewards balance'], .rewards-amount, [class*='Miles'] [class*='balance'], [class*='balance-amount']"
     },
     "Citi": {

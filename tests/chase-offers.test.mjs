@@ -48,7 +48,7 @@ test('Chase activation verifies details and preserves spend and expiration befor
         const nav = p.document.querySelector('mds-navigation-bar').attachShadow({ mode: 'open' });
         nav.innerHTML = '<span role="heading" aria-level="1">About this deal</span><button aria-label="Back"><span>Back</span></button>';
         const heading = p.document.querySelector('mds-heading').attachShadow({ mode: 'open' });
-        heading.innerHTML = '<h2>Turo</h2><h3>$30 cash back</h3>';
+        heading.innerHTML = '<h2 data-testid="merchant-name">Turo</h2><div role="heading" aria-level="3">$30 cash back</div>';
         nav.querySelector('button').click = () => { p.document.body.innerHTML = `<p>Sapphire Preferred...0947</p>${tile('one', 'Turo', 'Success Added')}`; };
     };
     const result = await p.run(addOffersToCard, 300);
@@ -67,6 +67,26 @@ test('distinct issuer IDs keep matching merchant and discount offers separate', 
     const offers = await p.run(offersPageScraper);
     assert.equal(offers.length, 2);
     assert.equal(offers[0].activationVerified, true);
+});
+
+test('Chase keeps the YouTube Premium offer whose title and badge both mention a discount', async () => {
+    const merchant = 'YouTube Premium: 50% off your first two subscription payments';
+    const p = page(`<a id="youtube" data-testid="commerce-tile" aria-label="${merchant} 50% cash back Add Offer"><span class="titleTagVariant2Container">${merchant}</span><span class="subtitleTagVariant2Container">50% cash back</span><button>New offer details</button><button>Add Offer</button></a>`);
+    const offers = await p.run(offersPageScraper);
+    assert.equal(offers.length, 1);
+    assert.equal(offers[0].merchant, merchant);
+    assert.equal(offers[0].discountType, 'pct_back');
+    assert.equal(offers[0].discountValue, 50);
+});
+
+test('issuer terms preserve comma-separated minimum spend and numeric expiration dates', async () => {
+    const p = page('<article><h2>Example Merchant</h2><p>Spend $1,000 or more, earn $50 back</p><p>Expires 11/30/2026</p></article>');
+    const offers = await p.run(offersPageScraper);
+    assert.equal(offers.length, 1);
+    assert.equal(offers[0].minSpendCents, 100000);
+    assert.equal(new Date(offers[0].expiresAt).getFullYear(), 2026);
+    assert.equal(new Date(offers[0].expiresAt).getMonth(), 10);
+    assert.equal(new Date(offers[0].expiresAt).getDate(), 30);
 });
 
 test('Chase never activates a tile without a visible selected account', async () => {

@@ -50,3 +50,16 @@ test('a Chase read-only selected account remains a strong card match below the n
     assert.equal(result.id, 'actual');
     assert.equal(result.strong, true);
 });
+
+test('Chase benefits identify the ending in the shadow navigation and ignore extension widgets', () => {
+    const { window, document } = parseHTML('<html><body><mds-navigation-bar></mds-navigation-bar><div id="fins-launcher-root"></div></body></html>');
+    document.querySelector('mds-navigation-bar').attachShadow({ mode: 'open' }).innerHTML = '<span role="heading" aria-level="1">Benefits (...0947)</span>';
+    document.querySelector('#fins-launcher-root').attachShadow({ mode: 'open' }).innerHTML = '<span role="heading" aria-level="1">Sapphire Preferred (...4087)</span>';
+    delete window.__finsReader;
+    window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 300, height: 40, top: 350 });
+    const ctx = vm.createContext({ window, document, scrollY: 0 });
+    vm.runInContext(readFileSync(new URL('../content/reader.js', import.meta.url), 'utf8'), ctx);
+    const result = window.__finsReader.detectCard([{ id: 'current', words: ['0947'] }, { id: 'other', words: ['4087'] }]);
+    assert.equal(result.id, 'current');
+    assert.equal(result.strong, true);
+});

@@ -30,6 +30,27 @@ test('spend thresholds and multi-year credits are not annual cash allowances',()
  assert.equal(parse('The Centurion Lounge Complimentary Guest Access','$5,677 Earned $69,323 To Go this year'),null);
  assert.equal(parse('Global Entry Credit','Receive $120 credit every 4 years'),null);
 });
+test('Chase anniversary credits use the explicit statement closing cycle and actual redeemed amount',()=>{
+ const text='$100 of $100earned. Start earning toward your next statement credit after your statement closing date on 4/15/2027. Earn up to $100 in statement credits each account anniversary year for hotel stays purchased through Chase Travel.';
+ const b=parse('$100 annual Chase Travel hotel credit',text);
+ assert.equal(b.total,100);assert.equal(b.used,100);assert.equal(b.remaining,0);assert.equal(b.fullyUsed,true);
+ assert.equal(b.periodStart,'2026-04-16');assert.equal(b.periodEnd,'2027-04-15');
+ assert.equal(parse('$100 annual hotel credit','Earn up to $100 each account anniversary year.'),null);
+});
+test('DoorDash monthly promos without a dollar heading retain unknown usage after enrollment',()=>{
+ const b=parse('DoorDash non-restaurant promo','Get up to $10 off each month on non-restaurant DoorDash orders while enrolled in DashPass. Activated');
+ assert.equal(b.total,10);assert.equal(b.cadence,'monthly');assert.equal(b.enrollment,'active');
+ assert.equal(b.usageKnown,false);assert.equal(b.used,null);assert.equal(b.periodEnd,'2026-11-30');
+});
+test('Chase benefit detail pages read their accessible title and exact usage tracker',()=>{
+ const {window}=parseHTML('<html><body><main><div role="heading" aria-level="1" data-testid="intro-benefit-title">$100 annual Chase Travel hotel credit</div><p>$100 of $100earned. Start earning toward your next statement credit after your statement closing date on 4/15/2027. Earn up to $100 in statement credits each account anniversary year.</p></main></body></html>');
+ delete window.__finsReader;
+ const ctx=vm.createContext({window,document:window.document,location:{href:'https://secure.chase.com/web/auth/dashboard#/dashboard/benefits/detail'}});
+ vm.runInContext(readFileSync(new URL('../content/benefit-parser.js',import.meta.url),'utf8'),ctx);
+ vm.runInContext(readFileSync(new URL('../content/reader.js',import.meta.url),'utf8'),ctx);
+ const benefits=window.__finsReader.readBenefits();
+ assert.equal(benefits.length,1);assert.equal(benefits[0].used,100);assert.equal(benefits[0].periodEnd,'2027-04-15');
+});
 test('reader keeps benefit tiles separate and recognizes the selected card combobox',()=>{
  const {window}=parseHTML('<html><body><div role="combobox" aria-label="Open to manage your other accounts">Blue Cash Everyday ••••21000</div><section><h2>$84 Disney Credit</h2><p>Get $7 back per month. Enrollment required.</p></section><section><h2>$180 Home Chef Credit</h2><p>Get $15 back per month.</p></section><div id="fins-status-root"><h2>$900 Fake Credit</h2>Annual credit. $900 earned $0 remaining</div></body></html>');
  delete window.__finsReader;

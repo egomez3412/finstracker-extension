@@ -22,8 +22,19 @@
             const start = MONTHS.indexOf(match[2].toLowerCase()), end = match[3] ? MONTHS.indexOf(match[3].toLowerCase()) : start;
             return currentMonth >= start && currentMonth <= end;
         });
-        let cadence = null, startMonth = 0, endMonth = 11;
-        if (current) {
+        let cadence = null, startMonth = 0, endMonth = 11, anniversaryPeriod = null;
+        if (/account anniversary year|cardmember year/i.test(text)) {
+            const next = text.match(/after your statement closing date on (\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+            if (!next) return null;
+            const endYear = Number(next[3]), month = Number(next[1]) - 1, day = Number(next[2]);
+            const end = new Date(Date.UTC(endYear, month, day));
+            if (end.getUTCFullYear() !== endYear || end.getUTCMonth() !== month || end.getUTCDate() !== day) return null;
+            const priorDay = Math.min(day, new Date(Date.UTC(endYear - 1, month + 1, 0)).getUTCDate());
+            const start = new Date(Date.UTC(endYear - 1, month, priorDay + 1));
+            anniversaryPeriod = { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) };
+            if (today < anniversaryPeriod.start || today > anniversaryPeriod.end) return null;
+            cadence = 'annual';
+        } else if (current) {
             startMonth = MONTHS.indexOf(current[2].toLowerCase());
             endMonth = current[3] ? MONTHS.indexOf(current[3].toLowerCase()) : startMonth;
             cadence = ({1:'monthly',3:'quarterly',6:'semi-annual',12:'annual'})[endMonth - startMonth + 1] || null;
@@ -56,6 +67,10 @@
             const divisor = annualHeading ? ({monthly:12,quarterly:4,'semi-annual':2})[cadence] || 1 : 1;
             total = round(annualCap / divisor);
         }
+        if (total == null) {
+            const periodic = text.match(new RegExp(`(?:get|receive|save)\\s+(?:up to\\s+)?\\$\\s*(${NUMBER})\\s*(?:off|back|in (?:statement )?credits?)?\\s*(?:each|per|a)\\s+(?:calendar\\s+)?(month|quarter|year)\\b`, 'i'));
+            if (periodic && ({month:'monthly',quarter:'quarterly',year:'annual'})[periodic[2].toLowerCase()] === cadence) total = amount(periodic[1]);
+        }
         const enrollment = /not unlocked/i.test(text) ? 'not-unlocked' : /enrollment required|activation required|enroll now/i.test(text) && used == null && remaining == null ? 'required' : /activated|enrolled/i.test(text) ? 'active' : 'unknown';
         if (!cadence || title.length > 160 || !(total > 0) || total > 10000 || used != null && used > total || remaining != null && remaining > total) return null;
         const usageKnown = (used != null || remaining != null) && (!dated.length || Boolean(current));
@@ -66,8 +81,8 @@
         return {
             title: title.replace(/^\$\s*[\d,.]+\s+/, '').replace(/\s*\(formerly known as[^)]*\)/i, '').trim(),
             total, used, remaining, fullyUsed, usageKnown, cadence, enrollment,
-            periodStart: `${year}-${String(startMonth + 1).padStart(2,'0')}-01`,
-            periodEnd: new Date(Date.UTC(year, endMonth + 1, 0)).toISOString().slice(0,10),
+            periodStart: anniversaryPeriod?.start || `${year}-${String(startMonth + 1).padStart(2,'0')}-01`,
+            periodEnd: anniversaryPeriod?.end || new Date(Date.UTC(year, endMonth + 1, 0)).toISOString().slice(0,10),
         };
     }
     window.__finsBenefitParser = { parse };

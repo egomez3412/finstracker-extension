@@ -953,23 +953,47 @@
     // Reads the switcher's options even while hidden; with open, opens it (and closes it again) when
     // the site draws them only on open. Returns [{ text }]; the worker cleans and matches them.
     async function listSiteCards(open = false) {
-        const MASK = /(?:\.{2,}|[•*·∙●]+|(?<![a-z])x{1,4}|ending(?: in)?)\s*\d{4,5}\b/i; // Amex: "••••61007"
+        const MASK = /(?:\.{2,}|…|[•*·∙●]+|(?<![a-z])x{1,4}|ending(?: in)?)\s*\d{4,5}(?=\b|ending(?: in)?)/i; // Amex: "••••61007"
         const OFFER = /(\$\s?\d|%|\bearn\b|\bspend\b|\bpay\b|\bdue\b|\bbalance\b|statement|payment|transaction)/i;
         const ours = "#fins-launcher-root, #fins-status-root, #fins-prompt-root, #fins-picker-host, #fins-board-root";
         const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-        const textOf = (el) => (el.textContent || "").replace(/\s+/g, " ").trim();
+        const textOf = (el) => {
+            let text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+            // Capital One puts the product name in the card image's alt text beside “...4509”.
+            if (MASK.test(text) && !/[a-z]/i.test(text)) {
+                const image = el.querySelector('img[alt]');
+                if (image?.alt) text = `${image.alt} ${text}`;
+            }
+            return text;
+        };
+        const roots = () => {
+            const all = [document];
+            for (let i = 0; i < all.length; i++) for (const el of all[i].querySelectorAll('*')) if (el.shadowRoot) all.push(el.shadowRoot);
+            return all;
+        };
+        const excluded = el => {
+            for (let n = el, depth = 0; n && depth < 14; n = n.parentElement || n.parentNode?.host, depth++) {
+                if (n.closest?.(ours) || /^(TABLE|TR|TD|TH|FOOTER)$/.test(n.tagName) || /^(row|rowgroup|cell|table|contentinfo)$/.test(n.getAttribute?.('role') || '')) return true;
+                if (/transaction|activity|statement|payment|history|footer/i.test(`${n.id || ''} ${n.className || ''}`)) return true;
+            }
+            return false;
+        };
         const collect = () => {
             const out = new Map();
             const add = (el) => {
-                if (!el || el.closest(ours)) return;
+                if (!el || excluded(el)) return;
                 const t = textOf(el);
                 if (!t || t.length > 90 || !MASK.test(t) || OFFER.test(t)) return;
+                const product = t.replace(new RegExp(MASK.source, 'gi'), ' ').replace(/\b(?:card |account )?ending(?: in)?\b/gi, '').trim();
+                if (!/[a-z]{3}/i.test(product) || /virtual card|finish (?:setting|setup)|you still have/i.test(product)) return;
                 const n = (t.match(/(\d{4,5})\b(?!.*\d{4,5}\b)/) || [])[1];
                 if (n && (!out.has(n) || t.length < out.get(n).length)) out.set(n, t);
             };
-            document.querySelectorAll("[role='option'], [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='radio'], [aria-haspopup], li, button, a, h1, h2, h3").forEach(add);
-            // Short leaf-ish blocks too (account tiles), but not whole sections.
-            for (const el of document.body ? document.body.querySelectorAll("div, span, p") : []) if (el.children.length <= 3) add(el);
+            for (const root of roots()) {
+                root.querySelectorAll("[role='option'], [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='radio'], [role='link'], [aria-haspopup], li, button, a, h1, h2, h3").forEach(add);
+                // A bare ending must not replace a longer product name for the same account.
+                for (const el of root.querySelectorAll('div, span, p')) if (el.children.length <= 3) add(el);
+            }
             return out;
         };
         let found = collect();

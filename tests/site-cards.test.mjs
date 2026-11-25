@@ -13,6 +13,13 @@ test("card names and numbers as banks show them", () => {
     assert.deepEqual(cleanSiteCardName("Hilton Honors Aspire Card x2008"), { name: "Hilton Honors Aspire Card", last4: "2008" });
 });
 
+test('Capital One repeated accessible endings and Unicode ellipses identify one account', () => {
+    assert.deepEqual(cleanSiteCardName('Venture...4509ending in ...4509'), { name: 'Venture', last4: '4509' });
+    assert.deepEqual(cleanSiteCardName('Venture …4509'), { name: 'Venture', last4: '4509' });
+    assert.equal(cleanSiteCardName('Venture ...4509 ending in ...2469'), null, 'conflicting accounts never merge');
+    assert.equal(cleanSiteCardName('ending in ...4509'), null);
+});
+
 const mine = [
     { id: "g", displayName: "Amex Gold Card" },
     { id: "p", displayName: "Amex Platinum Card" },

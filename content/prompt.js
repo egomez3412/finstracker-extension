@@ -77,12 +77,12 @@
         const list = current.newCards || [];
         if (current.mode === "start") {
             // The list only: the popup's main button adds and runs them.
-            fresh.innerHTML = list.length ? `<div class="fins-prompt-checks">${list.map((c) => `<label><input type="checkbox" data-new value="${esc(c.key)}" checked> ${esc(c.name)}${c.last4 ? ` <span class="fins-prompt-mask">•••• ${esc(c.last4)}</span>` : ""}</label>`).join("")}</div>
+            fresh.innerHTML = list.length ? `<div class="fins-prompt-checks">${list.map((c) => `<label><input type="checkbox" data-new value="${esc(c.key)}" ${c.requiresConfirmation ? '' : 'checked'}> ${esc(c.name)}${c.last4 ? ` <span class="fins-prompt-mask">•••• ${esc(c.last4)}</span>` : ""}${c.requiresConfirmation ? ' · add as a separate card' : ''}</label>`).join("")}</div>
                 <div class="fins-prompt-actions"><button class="fins-prompt-btn fins-prompt-quiet" type="button" data-act="ignore-new">None of these are mine</button></div>` : "";
             return;
         }
         fresh.innerHTML = list.length ? `<div class="fins-prompt-newhead">${list.length === 1 ? "A card" : `${list.length} cards`} on ${esc(site)} ${list.length === 1 ? "isn't" : "aren't"} in Finstracker yet</div>
-            <div class="fins-prompt-checks">${list.map((c) => `<label><input type="checkbox" data-new value="${esc(c.key)}" checked> ${esc(c.name)}${c.last4 ? ` <span class="fins-prompt-mask">•••• ${esc(c.last4)}</span>` : ""}</label>`).join("")}</div>
+            <div class="fins-prompt-checks">${list.map((c) => `<label><input type="checkbox" data-new value="${esc(c.key)}" ${c.requiresConfirmation ? '' : 'checked'}> ${esc(c.name)}${c.last4 ? ` <span class="fins-prompt-mask">•••• ${esc(c.last4)}</span>` : ""}${c.requiresConfirmation ? ' · add as a separate card' : ''}</label>`).join("")}</div>
             <div class="fins-prompt-actions"><button class="fins-prompt-btn" type="button" data-act="add-new">${list.length === 1 ? "Add card" : "Add cards"}</button><button class="fins-prompt-btn fins-prompt-quiet" type="button" data-act="ignore-new">Not mine</button></div>` : "";
     }
     function render() {

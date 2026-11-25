@@ -10,7 +10,7 @@
     host.id = "fins-checkout-root";
     const rows = [
         ...(p.next ? [[`Next best: ${p.next.name}`, `${p.next.rate} · ${p.next.cents}¢`]] : []),
-        ...(p.offers || []).map((o) => [o.title, o.cardName || ""]),
+        ...(p.offers || []).map((o) => [o.title, [o.cardName, o.requirement].filter(Boolean).join(' · ')]),
     ];
     host.innerHTML = `
         <div class="fins-checkout" role="complementary" aria-label="Finstracker best card">

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Finstracker Sync",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Sync card points from issuer sites, track credits and offers, and see the best card to use at checkout.",
   "permissions": [
     "storage",

@@ -42,6 +42,14 @@ git clone https://github.com/egomez3412/finstracker-extension.git
 
 To update: `git pull`, then click **Reload** on the extension in `chrome://extensions`. Settings and saved balance spots are kept.
 
+### Release cadence
+
+Group related issuer-reader fixes into one extension release. Check the complete affected flow, including card matching, offer terms, activation status and the saved dashboard result, before requesting a reload. Use local issuer-page fixtures for development so repeated bank sign-ins and reloads are not the test loop.
+
+Ship website and server fixes independently when they do not change extension code. Documentation-only changes do not require a version bump or reload. Reserve an extra extension release for a verified urgent issue that could save incorrect financial data or affect security; otherwise include follow-up fixes in the next batch.
+
+For a release that changes extension code, publish one version and send one consolidated update request with the remaining verification steps. This unpacked installation needs a manual Chrome reload when its code changes; ordinary syncing does not. A Chrome Web Store distribution can deliver signed updates through Chrome's normal update process.
+
 ## Quick tab
 
 Close the sync prompt on a card's site and a small Finstracker tab stays on the edge of the page (and on the site's other pages). Drag it anywhere along the left or right edge; it remembers the spot. Click it for **Sync points/cash back**, **Pick the balance**, **Sync offers**, **Sync benefits**, **Run autopilot**, **Open Finstracker** (the side panel) or **Hide on this site**. Settings has a switch for it and brings it back on hidden sites.

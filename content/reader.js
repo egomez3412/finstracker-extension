@@ -4,7 +4,7 @@
  * Exposes window.__finsReader: extract, watch, signInShown, findRewardsLink, highlight, clearHighlight. */
 (function () {
     // Bump this when reader behavior changes, so open issuer tabs do not retain an older reader.
-    const READER_VERSION = 2;
+    const READER_VERSION = 3;
     if (window.__finsReader?.version === READER_VERSION) return;
     let lastFound = null; // element of the last balance found, for highlight()
     let lastScan = []; // scored candidates from the last scan, for suggestions()

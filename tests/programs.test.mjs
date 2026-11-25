@@ -1,8 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { balanceHints, cardIssuer, distinctWords, nameWords, normalizeIssuer, programFor } from "../lib/programs.js";
+import { balanceHints, cardIssuer, distinctWords, nameWords, normalizeIssuer, programFor, rewardsAccountKey } from "../lib/programs.js";
 import { cardsForUrl, nextHop, pageToRemember, resolvePortal, urlMatches } from "../lib/portals.js";
+
+test('shared-program reuse stays inside the saved rewards account', () => {
+    assert.equal(rewardsAccountKey({ id: 'a' }), rewardsAccountKey({ id: 'b' }), 'legacy primary account keeps its pool');
+    assert.notEqual(rewardsAccountKey({ id: 'a', rewardsAccount: '' }), rewardsAccountKey({ id: 'b', rewardsAccount: '' }));
+    assert.notEqual(rewardsAccountKey({ rewardsAccount: 'Eduardo' }), rewardsAccountKey({ rewardsAccount: 'Daisy' }));
+    assert.equal(rewardsAccountKey({ rewardsAccount: ' Eduardo ' }), rewardsAccountKey({ rewardsAccount: 'eduardo' }));
+});
 
 const portals = JSON.parse(readFileSync(new URL("../portals.json", import.meta.url)));
 

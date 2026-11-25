@@ -3,6 +3,7 @@ import { CATEGORY_LABELS } from "../lib/merchants.js";
 import { rateLabel } from "../lib/best-card.js";
 import { daysUntil, dueLabel, localToday, nextFeeDate, openCredits, openOffers, summary } from "../lib/benefits.js";
 import { PRODUCTION, getState, onChanged, setState } from "../lib/storage.js";
+import { Tracker } from "../lib/api.js";
 
 const app = document.getElementById("app");
 const CHECKOUT_ORIGINS = ["https://*/*"];
@@ -276,7 +277,8 @@ function newCardsBlock(p) {
     if (!p.bank && !p.cardIds.length) return "";
     if (!p.newCards?.length) return `<div class="action-row"><button type="button" class="btn-ghost btn-small" data-act="find-new" ${state.findingNew ? "disabled" : ""}>${state.findingNew ? "Looking…" : "Find new cards on this site"}</button></div>`;
     return `<div class="row-title">${p.newCards.length === 1 ? "A card here isn't" : `${p.newCards.length} cards here aren't`} in Finstracker yet</div>
-        <div class="link-list new-list">${p.newCards.map((c) => `<label class="link-item"><input type="checkbox" value="${esc(c.key)}" checked> ${esc(c.name)}${c.last4 ? ` <span class="row-sub">•••• ${esc(c.last4)}</span>` : ""}</label>`).join("")}</div>
+        <p class="row-sub">Different card endings are saved as separate cards. If an existing card has no ending, save its ending first or select the new account below to add it separately.</p>
+        <div class="link-list new-list">${p.newCards.map((c) => `<label class="link-item"><input type="checkbox" value="${esc(c.key)}" ${c.requiresConfirmation ? '' : 'checked'}> ${esc(c.name)}${c.last4 ? ` <span class="row-sub">•••• ${esc(c.last4)}</span>` : ""}${c.requiresConfirmation ? '<span class="row-sub">Add as a separate card</span>' : ''}</label>`).join("")}</div>
         <div class="action-row"><button type="button" class="btn-primary btn-small" data-act="add-site-cards">Add to Finstracker</button><button type="button" class="btn-ghost btn-small" data-act="ignore-site-cards">Not mine</button></div>`;
 }
 
@@ -499,6 +501,9 @@ const actions = {
         const id = el.dataset.id;
         const value = el.closest("[data-card]").querySelector("[data-card-ending]").value.trim();
         if (value && !/^\d{4}$/.test(value)) return toast("Enter exactly four digits, or leave blank to clear.", { kind: "error" });
+        const { apiBase, token } = await getState(['apiBase', 'token']);
+        try { await Tracker.updateCard(apiBase, token, id, { last4: value }); }
+        catch (err) { return toast(err.message || 'Could not save the card ending.', { kind: 'error' }); }
         const { cardLast4 = {} } = await getState(["cardLast4"]);
         const next = { ...cardLast4 };
         if (value) next[id] = value; else delete next[id];

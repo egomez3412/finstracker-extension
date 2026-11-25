@@ -917,6 +917,8 @@
             }
         };
         // Strongest signals first: the switcher button and selected items, then the page's top bar and headings.
+        // Chase replaces the switcher with a read-only selected account when this login has one card.
+        document.querySelectorAll('[data-testid="account-selector-readonly"]').forEach((el) => consider(el, 8));
         document.querySelectorAll("[role='combobox'], [aria-haspopup], [aria-selected='true'], [aria-current='true'], [aria-current='page'], [aria-checked='true']").forEach((el) => consider(el, 8));
         document.querySelectorAll("header *, [role='banner'] *, nav *").forEach((el) => { if (el.children.length <= 3) consider(el, 5); });
         document.querySelectorAll("h1, h2, [role='heading']").forEach((el) => consider(el, 4));

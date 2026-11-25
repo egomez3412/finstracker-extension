@@ -14,9 +14,14 @@ const tile = (id, merchant, status = 'Add Offer') => `<a id="${id}" data-testid=
 test('Chase expands all scrolling batches without opening a featured collection', async () => {
     const p = page(`<button>See more offers</button>${tile('one', 'Mint Indian Restaurant')}`);
     let navigated = false;
+    let sentinelReady = true;
     p.document.querySelector('button').click = () => { navigated = true; };
     Object.defineProperty(p.document.documentElement, 'scrollTop', { set(y) {
-        if (y > 0 && p.document.querySelectorAll('[data-testid="commerce-tile"]').length < 5) p.document.body.insertAdjacentHTML('beforeend', tile(`offer${Math.random()}`, 'Turo'));
+        if (y === 0) sentinelReady = true;
+        if (y > 0 && sentinelReady && p.document.querySelectorAll('[data-testid="commerce-tile"]').length < 5) {
+            p.document.body.insertAdjacentHTML('beforeend', tile(`offer${p.document.querySelectorAll('[data-testid="commerce-tile"]').length}`, 'Turo'));
+            sentinelReady = false;
+        }
     } });
     Object.defineProperty(p.document.documentElement, 'scrollHeight', { get: () => 5000 });
     await p.run(expandOffersPage);

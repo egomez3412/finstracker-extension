@@ -74,11 +74,11 @@
   "cards": {
     "chase-sapphire-preferred": {
       "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards",
-      "selector": "[data-pt-name='rewardsBalance'], [data-cy='ur-balance'], [data-cy*='ultimate-rewards-balance'], [data-testid='ur-balance'], [data-testid*='ultimate-rewards'], [aria-label*='Ultimate Rewards' i], [aria-label*='Ultimate Rewards'] [class*='balance'], [class*='UltimateRewards'] [class*='balance']"
+      "selector": "#rewards-multi-navigation-tile-TileListId >>> .list-item__label--titleMediumHeavier, [data-pt-name='rewardsBalance'], [data-cy='ur-balance'], [data-cy*='ultimate-rewards-balance'], [data-testid='ur-balance'], [data-testid*='ultimate-rewards'], [aria-label*='Ultimate Rewards' i], [aria-label*='Ultimate Rewards'] [class*='balance'], [class*='UltimateRewards'] [class*='balance']"
     },
     "chase-sapphire-reserve": {
       "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards",
-      "selector": "[data-pt-name='rewardsBalance'], [data-cy='ur-balance'], [data-cy*='ultimate-rewards-balance'], [data-testid='ur-balance'], [data-testid*='ultimate-rewards'], [aria-label*='Ultimate Rewards' i], [aria-label*='Ultimate Rewards'] [class*='balance'], [class*='UltimateRewards'] [class*='balance']"
+      "selector": "#rewards-multi-navigation-tile-TileListId >>> .list-item__label--titleMediumHeavier, [data-pt-name='rewardsBalance'], [data-cy='ur-balance'], [data-cy*='ultimate-rewards-balance'], [data-testid='ur-balance'], [data-testid*='ultimate-rewards'], [aria-label*='Ultimate Rewards' i], [aria-label*='Ultimate Rewards'] [class*='balance'], [class*='UltimateRewards'] [class*='balance']"
     },
     "chase-freedom-unlimited": {
       "pointsUrlHint": "https://secure.chase.com/web/auth/dashboard#/dashboard/ultimateRewards/cashBack",

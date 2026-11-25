@@ -78,6 +78,16 @@
             // many banking portals use as digit-group separators.
             return raw.replace(/[\u00a0\u202f\u2009\u2007]/g, " ").trim();
         }
+        function inPromotion(el) {
+            let node = el;
+            for (let depth = 0; depth < 4 && node; depth++) {
+                const text = pickText(node);
+                if (text.length > 600) break;
+                if (/\b(?:refer(?:ral)? friends?|earn up to|welcome (?:bonus|offer)|sign[ -]?up bonus|bonus points per year|pre[ -]?approved)\b/i.test(text)) return true;
+                node = node.parentElement || node.parentNode?.host || null;
+            }
+            return false;
+        }
         function isVisible(el) {
             if (!(el instanceof Element)) return false;
             const r = el.getBoundingClientRect();
@@ -115,6 +125,17 @@
             }
         }
         function deepQuerySelectorAll(sel) {
+            // Keep a selector scoped to its named web component across open shadow roots.
+            // A global leaf-class match could otherwise read another widget's number.
+            if (sel.includes('>>>')) {
+                const [host, ...parts] = sel.split(/\s*>>>\s*/);
+                let nodes = deepQuerySelectorAll(host);
+                for (const part of parts) nodes = nodes.flatMap(node => {
+                    try { return [...(node.shadowRoot || node).querySelectorAll(part)]; }
+                    catch { return []; }
+                });
+                return nodes;
+            }
             const out = [];
             try {
                 document.querySelectorAll(sel).forEach((n) => out.push(n));
@@ -166,7 +187,7 @@
                 const txt = pickText(n);
                 if (!txt) continue;
                 if (unitHint === "points" && /[$€£]\s*-?\d/.test(txt)) continue; // a dollar amount is not points
-                if (inFooter(n) || noisyText(txt)) continue;
+                if (inFooter(n) || noisyText(txt) || inPromotion(n)) continue;
                 const clean = stripDates(txt);
                 const first = (clean.match(/-?\d[\d,]*(?:\.\d+)?/) || [""])[0];
                 if (!first || yearOnly(first, clean)) continue;
@@ -240,7 +261,7 @@
                 walk = nextWalk;
             }
             if (inExcluded) continue;
-            if (inFooter(el) || noisyText(txt)) continue;
+            if (inFooter(el) || noisyText(txt) || inPromotion(el)) continue;
 
             const nums = stripDates(txt).match(NUMERIC_RX) || [];
             if (!nums.length) continue;

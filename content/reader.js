@@ -3,7 +3,9 @@
  * Content-Security-Policy headers (most banks) cannot block it.
  * Exposes window.__finsReader: extract, watch, signInShown, findRewardsLink, highlight, clearHighlight. */
 (function () {
-    if (window.__finsReader) return;
+    // Bump this when reader behavior changes, so open issuer tabs do not retain an older reader.
+    const READER_VERSION = 2;
+    if (window.__finsReader?.version === READER_VERSION) return;
     let lastFound = null; // element of the last balance found, for highlight()
     let lastScan = []; // scored candidates from the last scan, for suggestions()
 
@@ -911,7 +913,9 @@
             const top = r.top + scrollY < 220 ? 3 : 0; // the bar at the top of the page
             for (const c of list) {
                 if (!c.words.every((w) => t.includes(w))) continue;
-                const s = weight + top;
+                const confirmedEnding = c.words.length === 1 && /^\d{4}$/.test(c.words[0]) &&
+                    new RegExp(`(?:\\.{3}|…|[•*x]{2,}|ending(?: in)?)\\s*${c.words[0]}\\b`, 'i').test(t);
+                const s = weight + top + (confirmedEnding ? 10 : 0);
                 const best = scores.get(c.id);
                 if (!best || s > best.score) scores.set(c.id, { id: c.id, score: s, text: t.slice(0, 80) });
             }
@@ -1113,5 +1117,5 @@
         return { rows, clicks, reachedKnown: rows.some((r) => seen.has(r.key)) };
     }
 
-    window.__finsReader = { extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, readPointsHistory, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard, listSiteCards };
+    window.__finsReader = { version: READER_VERSION, extract, watch, signInShown, findRewardsLink, findLink, readBenefits, expandDetails, readActivity, readPointsHistory, highlight, clearHighlight, suggestions, settle, switchAccount, detectCard, foundNearCard, listSiteCards };
 })();

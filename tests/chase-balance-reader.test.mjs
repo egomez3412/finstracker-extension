@@ -46,7 +46,7 @@ test('a Chase read-only selected account remains a strong card match below the n
     window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 300, height: 40, top: 380 });
     const context = vm.createContext({ window, Element: window.Element, document, scrollY: 0, getComputedStyle: () => ({ visibility: 'visible' }) });
     vm.runInContext(readFileSync(new URL('../content/reader.js', import.meta.url), 'utf8'), context);
-    const result = window.__finsReader.detectCard([{ id: 'actual', words: ['0947'] }, { id: 'other', words: ['4087'] }]);
+    const result = window.__finsReader.detectCard([{ id: 'actual', words: ['0947'] }, { id: 'other', words: ['4087'] }, { id: 'duplicate', words: ['sapphire', 'preferred'] }]);
     assert.equal(result.id, 'actual');
     assert.equal(result.strong, true);
 });

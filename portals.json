@@ -5,7 +5,7 @@
       "loginUrl": "https://www.americanexpress.com/en-us/account/login",
       "pointsUrlHint": "https://global.americanexpress.com/rewards",
       "matchUrl": "https://*.americanexpress.com/*",
-      "selector": "[data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [data-testid*='rewards-balance'], [aria-label*='Membership Rewards'] [class*='balance'], [class*='RewardsHeader'] [class*='balance'], .balance-amount, [class*='reward'][class*='balance']"
+      "selector": "#globalmrnavpointbalance, [data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [data-testid*='rewards-balance'], [aria-label*='Membership Rewards'] [class*='balance'], [class*='RewardsHeader'] [class*='balance'], .balance-amount, [class*='reward'][class*='balance']"
     },
     "Chase": {
       "loginUrl": "https://secure.chase.com/web/auth/dashboard",
@@ -100,23 +100,23 @@
     },
     "amex-gold": {
       "pointsUrlHint": "https://global.americanexpress.com/rewards/summary",
-      "selector": "[data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
+      "selector": "#globalmrnavpointbalance, [data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
     },
     "amex-platinum": {
       "pointsUrlHint": "https://global.americanexpress.com/rewards/summary",
-      "selector": "[data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
+      "selector": "#globalmrnavpointbalance, [data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
     },
     "amex-green": {
       "pointsUrlHint": "https://global.americanexpress.com/rewards/summary",
-      "selector": "[data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
+      "selector": "#globalmrnavpointbalance, [data-module-name='AxpRewardsSummary'] [data-testid='points-balance'], [data-testid*='points-balance'], [aria-label*='Membership Rewards'] [class*='balance']"
     },
     "amex-blue-cash-preferred": {
       "pointsUrlHint": "https://global.americanexpress.com/rewards/cash-back",
-      "selector": "[data-testid*='cash-back-balance'], [aria-label*='Cash Back'] [class*='balance'], [class*='CashBack'] [class*='balance']"
+      "selector": "#globalmrnavpointbalance, [data-testid*='cash-back-balance'], [aria-label*='Cash Back'] [class*='balance'], [class*='CashBack'] [class*='balance']"
     },
     "amex-blue-cash-everyday": {
       "pointsUrlHint": "https://global.americanexpress.com/rewards/cash-back",
-      "selector": "[data-testid*='cash-back-balance'], [aria-label*='Cash Back'] [class*='balance'], [class*='CashBack'] [class*='balance']"
+      "selector": "#globalmrnavpointbalance, [data-testid*='cash-back-balance'], [aria-label*='Cash Back'] [class*='balance'], [class*='CashBack'] [class*='balance']"
     },
     "capital-one-venture-x": {
       "pointsUrlHint": "https://myaccounts.capitalone.com/rewards",

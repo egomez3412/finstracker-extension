@@ -72,3 +72,16 @@ test('Atmos balance selector reads available points instead of status progress',
   assert.equal(result.text,'9,607');assert.equal(result.via,'selector');
  }
 });
+
+
+test('Amex selectors keep the complete available amount and skip yearly earned points', () => {
+ const portals=JSON.parse(readFileSync(new URL('../portals.json',import.meta.url),'utf8'));
+ for(const [unit,markup,expected] of [['points','63,684','63,684'],['cashback','<span>$14</span><sup>.42</sup>','$14.42']]) {
+  const {window}=parseHTML('<html><body><h3>Membership Rewards Points</h3><h4><span id="globalmrnavpointbalance">'+markup+'</span></h4><h2>Points Earned in 2026</h2><p>86,416</p></body></html>');
+  delete window.__finsReader;window.HTMLElement.prototype.getBoundingClientRect=()=>({width:300,height:40,top:20});
+  const ctx=vm.createContext({window,Element:window.Element,document:window.document,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'})});
+  vm.runInContext(readFileSync(new URL('../content/reader.js',import.meta.url),'utf8'),ctx);
+  const result=window.__finsReader.extract(portals.issuers['American Express'].selector,null,unit,{});
+  assert.equal(result.text,expected);assert.equal(result.via,'selector');
+ }
+});

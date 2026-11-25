@@ -53,7 +53,7 @@
       "loginUrl": "https://www.alaskaair.com/account/login",
       "pointsUrlHint": "https://www.alaskaair.com/account",
       "matchUrl": "https://*.alaskaair.com/*",
-      "selector": "[data-testid='mileage-balance'], [data-testid*='miles-balance'], [class*='MileagePlan'] [class*='balance'], [aria-label*='miles balance'], .mileage-balance"
+      "selector": ".points-header .points-value, [data-testid='mileage-balance'], [data-testid*='miles-balance'], [class*='MileagePlan'] [class*='balance'], [aria-label*='miles balance'], .mileage-balance"
     },
     "Barclays": {
       "loginUrl": "https://www.barclaycardus.com/servicing/home",
@@ -172,7 +172,7 @@
     },
     "alaska-mileage-plan-visa": {
       "pointsUrlHint": "https://www.alaskaair.com/account",
-      "selector": "[data-testid='mileage-balance'], [data-testid*='miles-balance'], [aria-label*='miles balance'], [class*='MileagePlan'] [class*='balance']"
+      "selector": ".points-header .points-value, [data-testid='mileage-balance'], [data-testid*='miles-balance'], [aria-label*='miles balance'], [class*='MileagePlan'] [class*='balance']"
     },
     "universal-rewards-plus": {
       "loginUrl": "https://auth.securebanklogin.com/?brand=universal",

@@ -58,3 +58,17 @@ test('Oura each-year wording keeps the visible annual allowance and zero usage',
  const b=parse('$200 Oura Ring Credit','$0 Earned $200 To Go Receive up to $200 back each year when you use your Platinum Card to purchase an Oura Ring through Oura. Enrollment required.');
  assert.equal(b.total,200);assert.equal(b.used,0);assert.equal(b.remaining,200);assert.equal(b.cadence,'annual');
 });
+
+
+test('Atmos balance selector reads available points instead of status progress', () => {
+ const portals=JSON.parse(readFileSync(new URL('../portals.json',import.meta.url),'utf8'));
+ const {window}=parseHTML('<html><body><section><h2>Status points earned this year</h2><strong>3,245</strong></section><div class="points-header"><div class="points-label">Available Points</div><div class="points-value display-sm">9,607</div></div></body></html>');
+ delete window.__finsReader;
+ window.HTMLElement.prototype.getBoundingClientRect=()=>({width:300,height:40,top:20});
+ const ctx=vm.createContext({window,Element:window.Element,document:window.document,scrollY:0,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'}),setTimeout,clearTimeout,location:{href:'https://www.alaskaair.com/atmosrewards/account/overview/'}});
+ vm.runInContext(readFileSync(new URL('../content/reader.js',import.meta.url),'utf8'),ctx);
+ for(const selector of [portals.issuers['Alaska Airlines'].selector,portals.cards['alaska-mileage-plan-visa'].selector]) {
+  const result=window.__finsReader.extract(selector,null,'points',{});
+  assert.equal(result.text,'9,607');assert.equal(result.via,'selector');
+ }
+});

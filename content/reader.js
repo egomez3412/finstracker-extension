@@ -4,7 +4,7 @@
  * Exposes window.__finsReader: extract, watch, signInShown, findRewardsLink, highlight, clearHighlight. */
 (function () {
     // Bump this when reader behavior changes, so open issuer tabs do not retain an older reader.
-    const READER_VERSION = 3;
+    const READER_VERSION = 4;
     if (window.__finsReader?.version === READER_VERSION) return;
     let lastFound = null; // element of the last balance found, for highlight()
     let lastScan = []; // scored candidates from the last scan, for suggestions()
@@ -783,6 +783,12 @@
     function readBenefits() {
         const parse = window.__finsBenefitParser?.parse;
         if (!parse) return [];
+        const chaseTitle = document.querySelector('[data-testid="intro-benefit-title"]');
+        if (/^https:\/\/secure\.chase\.com\//i.test(location.href) && chaseTitle) {
+            const text = document.querySelector('main')?.innerText || '';
+            const benefit = parse(chaseTitle.textContent, text);
+            if (benefit) return [benefit];
+        }
         const ours = '#fins-launcher-root, #fins-status-root, #fins-prompt-root, #fins-picker-host';
         const found = [];
         for (const el of document.querySelectorAll("li, article, section, div, a, button, [role='group'], [role='listitem']")) {

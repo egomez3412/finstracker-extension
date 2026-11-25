@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { cleanOverrides, issuerForUrl, resolvePortal, urlMatches } from "../lib/portals.js";
+import { cleanOverrides, issuerForUrl, readKindForUrl, resolvePortal, urlMatches } from "../lib/portals.js";
 
 const portals = JSON.parse(readFileSync(new URL("../portals.json", import.meta.url)));
 
@@ -45,4 +45,17 @@ test("sign-in pages are never the first choice (Amex signs you out when its logi
     assert.equal(startPage(amex), "https://global.americanexpress.com/rewards");
     assert.equal(startPage(amex, "https://global.americanexpress.com/overview"), "https://global.americanexpress.com/overview");
     assert.equal(startPage({ loginUrl: "https://bank.test/login" }), "https://bank.test/login"); // nothing else known
+});
+
+
+test('rewards-page routing ignores navigation words in query parameters', () => {
+ assert.equal(readKindForUrl('https://global.americanexpress.com/rewards?inav=MYCA_Rewards_Benefits'), 'points');
+ assert.equal(readKindForUrl('https://global.americanexpress.com/card-benefits/activity?account_key=example'), 'benefits');
+ assert.equal(readKindForUrl('https://global.americanexpress.com/offers/eligible?inav=benefits'), 'offers');
+ assert.equal(readKindForUrl('https://secure.chase.com/web/#/offers'), 'offers');
+});
+
+test('Atmos program searches use the available-points selector even without a catalog key', () => {
+ const portal=resolvePortal({id:'atmos',displayName:'Atmos Rewards · card 1',issuer:'Bank of America',program:'Rewards'},{},portals);
+ assert.equal(portal.program,'alaska');assert.ok(portal.selector.includes('.points-header .points-value'));
 });
